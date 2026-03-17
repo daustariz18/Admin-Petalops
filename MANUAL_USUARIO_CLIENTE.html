@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Manual de Usuario - Admin PetalOps</title>
+    <style>
+      :root {
+        --ink: #1f2937;
+        --muted: #4b5563;
+        --brand: #0f766e;
+        --brand-soft: #ccfbf1;
+        --line: #e5e7eb;
+        --bg: #f8fafc;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Segoe UI", Calibri, Arial, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+        line-height: 1.45;
+      }
+
+      .page {
+        width: 210mm;
+        min-height: 297mm;
+        margin: 0 auto;
+        background: #fff;
+        padding: 20mm 18mm;
+      }
+
+      h1,
+      h2,
+      h3 {
+        margin: 0 0 10px;
+        color: #0b3b37;
+      }
+
+      h1 {
+        font-size: 30px;
+        line-height: 1.1;
+      }
+
+      h2 {
+        font-size: 21px;
+        margin-top: 26px;
+        border-bottom: 2px solid var(--line);
+        padding-bottom: 6px;
+      }
+
+      h3 {
+        font-size: 17px;
+        margin-top: 18px;
+      }
+
+      p {
+        margin: 0 0 12px;
+        font-size: 14px;
+      }
+
+      ul,
+      ol {
+        margin: 0 0 12px;
+        padding-left: 20px;
+      }
+
+      li {
+        margin-bottom: 7px;
+        font-size: 14px;
+      }
+
+      .cover {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 20px;
+        background: linear-gradient(165deg, #f0fdfa, #ffffff 65%);
+        margin-bottom: 25px;
+      }
+
+      .cover-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: flex-start;
+      }
+
+      .brand-mark {
+        min-width: 160px;
+        text-align: right;
+      }
+
+      .brand-mark__title {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: 0.6px;
+        color: #115e59;
+      }
+
+      .brand-mark__sub {
+        margin: 2px 0 0;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      .tag {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+        color: #134e4a;
+        background: var(--brand-soft);
+        margin-bottom: 12px;
+      }
+
+      .meta {
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .box {
+        border-left: 4px solid var(--brand);
+        background: #f8fffe;
+        padding: 10px 12px;
+        margin: 12px 0;
+      }
+
+      .small {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .shot {
+        margin: 12px 0 18px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        overflow: hidden;
+        background: #fff;
+      }
+
+      .shot img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .shot figcaption {
+        padding: 8px 10px;
+        font-size: 12px;
+        color: var(--muted);
+        background: #f8fafc;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 10px 0 14px;
+      }
+
+      th,
+      td {
+        border: 1px solid var(--line);
+        text-align: left;
+        padding: 8px;
+        font-size: 13px;
+        vertical-align: top;
+      }
+
+      th {
+        background: #f1f5f9;
+      }
+
+      .footer {
+        margin-top: 25px;
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .doc-control {
+        margin-top: 16px;
+      }
+
+      .doc-control td:first-child {
+        width: 32%;
+        background: #f8fafc;
+        font-weight: 600;
+      }
+
+      @media print {
+        body {
+          background: #fff;
+        }
+
+        .page {
+          margin: 0;
+          width: auto;
+          min-height: auto;
+          padding: 12mm;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <section class="cover">
+        <div class="cover-head">
+          <div>
+            <div class="tag">Manual de Usuario</div>
+            <h1>Admin PetalOps</h1>
+          </div>
+          <div class="brand-mark" aria-label="Identidad corporativa">
+            <p class="brand-mark__title">PETALOPS</p>
+            <p class="brand-mark__sub">Plataforma administrativa</p>
+          </div>
+        </div>
+        <p>
+          Guía de uso para la gestión de productos con carga de imagen y creación de categorías.
+        </p>
+        <p class="meta">
+          Versión del manual: 1.0<br />
+          Fecha: 15 de marzo de 2026<br />
+          Destinatario: Cliente final / equipo operativo
+        </p>
+        <table class="doc-control" aria-label="Control documental">
+          <tbody>
+            <tr>
+              <td>Código de documento</td>
+              <td>MAN-ADM-PETALOPS-001</td>
+            </tr>
+            <tr>
+              <td>Elaborado por</td>
+              <td>Equipo de Implementación PetalOps</td>
+            </tr>
+            <tr>
+              <td>Revisado por</td>
+              <td>Líder Técnico del Proyecto</td>
+            </tr>
+            <tr>
+              <td>Aprobado por</td>
+              <td>Cliente / Product Owner</td>
+            </tr>
+            <tr>
+              <td>Clasificación</td>
+              <td>Uso operativo cliente</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <h2>1. Objetivo del sistema</h2>
+      <p>
+        Admin PetalOps permite a usuarios autenticados crear productos y asociarles una imagen.
+        El flujo está diseñado para registrar el producto, subir la imagen y confirmar la
+        vinculación en un proceso único, guiado por pasos de progreso.
+      </p>
+
+      <h2>2. Requisitos previos</h2>
+      <ul>
+        <li>Tener usuario y contraseña activos en la plataforma.</li>
+        <li>Contar con conexión a internet estable.</li>
+        <li>Usar un navegador actualizado (Chrome, Edge o equivalente).</li>
+        <li>Tener imágenes en formato JPEG, PNG o WebP.</li>
+        <li>Tamaño máximo de imagen permitido: 5 MB.</li>
+      </ul>
+
+      <h2>3. Inicio de sesión</h2>
+      <ol>
+        <li>Ingrese al módulo de administración.</li>
+        <li>Complete el campo Email.</li>
+        <li>Complete el campo Contraseña.</li>
+        <li>Presione Entrar.</li>
+      </ol>
+      <div class="box">
+        Si las credenciales son válidas, el sistema redirige automáticamente al dashboard del tenant
+        y habilita el formulario de Nuevo producto.
+      </div>
+      <figure class="shot">
+        <img src="manual-assets/pantallazo-login.png" alt="Pantalla de inicio de sesión de Admin PetalOps" />
+        <figcaption>Pantallazo 1. Vista de Inicio de sesión.</figcaption>
+      </figure>
+
+      <h2>4. Pantalla Nuevo producto</h2>
+      <p>La pantalla principal contiene:</p>
+      <ul>
+        <li>Campo Nombre del producto.</li>
+        <li>Campo Precio.</li>
+        <li>Selector de Categoría.</li>
+        <li>Selector de archivo de imagen.</li>
+        <li>Vista previa de la imagen seleccionada.</li>
+        <li>Botón Crear producto.</li>
+        <li>Botón Cerrar sesión (parte superior).</li>
+      </ul>
+      <figure class="shot">
+        <img src="manual-assets/pantallazo-nuevo-producto.png" alt="Pantalla principal de creación de producto" />
+        <figcaption>Pantallazo 2. Formulario de Nuevo producto.</figcaption>
+      </figure>
+
+      <h2>5. Crear una nueva categoría</h2>
+      <ol>
+        <li>Abra el selector de Categoría.</li>
+        <li>Seleccione + Agregar nueva...</li>
+        <li>Se abrirá el formulario/modal Nueva categoría.</li>
+        <li>Escriba el nombre de la categoría.</li>
+        <li>Presione Guardar.</li>
+      </ol>
+      <p>
+        Al guardar correctamente, la categoría se agrega a la lista y queda seleccionada en el
+        formulario del producto.
+      </p>
+      <p>
+        Si desea cancelar, presione Cancelar y el formulario de nueva categoría se ocultará sin
+        guardar cambios.
+      </p>
+      <figure class="shot">
+        <img src="manual-assets/pantallazo-modal-categoria.png" alt="Modal para crear una nueva categoría" />
+        <figcaption>Pantallazo 3. Modal de Nueva categoría.</figcaption>
+      </figure>
+
+      <h2>6. Crear producto con imagen</h2>
+      <ol>
+        <li>Escriba el nombre del producto.</li>
+        <li>Ingrese el precio (debe ser mayor a 0).</li>
+        <li>Seleccione una categoría existente o cree una nueva.</li>
+        <li>Adjunte la imagen del producto.</li>
+        <li>Presione Crear producto.</li>
+      </ol>
+      <p>Durante el proceso, verá una barra de avance con estas etapas:</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Etapa</th>
+            <th>Descripción</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Registrar</td>
+            <td>Se crea el producto en la base de datos.</td>
+          </tr>
+          <tr>
+            <td>Subir</td>
+            <td>La imagen se carga a almacenamiento S3 con URL firmada.</td>
+          </tr>
+          <tr>
+            <td>Confirmar</td>
+            <td>Se confirma en backend la imagen asociada al producto.</td>
+          </tr>
+          <tr>
+            <td>Listo</td>
+            <td>El proceso finaliza correctamente.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>7. Resultado exitoso</h2>
+      <p>Cuando la operación termina correctamente, se muestra:</p>
+      <ul>
+        <li>ID del producto.</li>
+        <li>Clave S3 de la imagen.</li>
+        <li>URL pública o de acceso de la imagen.</li>
+        <li>Botón Crear otro producto para iniciar un nuevo registro.</li>
+      </ul>
+
+      <h2>8. Mensajes de error y acciones recomendadas</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Situación</th>
+            <th>Acción recomendada</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Debe seleccionar una imagen.</td>
+            <td>Adjunte un archivo antes de continuar.</td>
+          </tr>
+          <tr>
+            <td>Precio inválido (menor o igual a 0).</td>
+            <td>Ingrese un valor numérico mayor a 0.</td>
+          </tr>
+          <tr>
+            <td>No se seleccionó categoría.</td>
+            <td>Seleccione una categoría existente o cree una nueva.</td>
+          </tr>
+          <tr>
+            <td>Formato de imagen no permitido.</td>
+            <td>Use únicamente JPEG, PNG o WebP.</td>
+          </tr>
+          <tr>
+            <td>Imagen supera 5 MB.</td>
+            <td>Optimice la imagen y vuelva a intentarlo.</td>
+          </tr>
+          <tr>
+            <td>Fallo en confirmación final.</td>
+            <td>Use el botón Reintentar confirmación.</td>
+          </tr>
+          <tr>
+            <td>Sesión expirada (401).</td>
+            <td>Inicie sesión nuevamente.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>9. Cierre de sesión</h2>
+      <ol>
+        <li>Presione Cerrar sesión en la parte superior de la pantalla.</li>
+        <li>El sistema limpiará la sesión y lo llevará a la vista de login.</li>
+      </ol>
+
+      <h2>10. Soporte</h2>
+      <p>
+        Para incidentes de acceso, validación de datos o carga de imágenes, contacte al equipo de
+        soporte técnico del proyecto e incluya:
+      </p>
+      <ul>
+        <li>Fecha y hora del incidente.</li>
+        <li>Correo del usuario afectado.</li>
+        <li>Mensaje de error visible en pantalla.</li>
+        <li>Paso exacto donde ocurrió la falla (Registrar, Subir o Confirmar).</li>
+      </ul>
+
+      <h2>11. Historial de cambios del documento</h2>
+      <table aria-label="Historial de cambios">
+        <thead>
+          <tr>
+            <th>Versión</th>
+            <th>Fecha</th>
+            <th>Descripción del cambio</th>
+            <th>Responsable</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1.0</td>
+            <td>15/03/2026</td>
+            <td>Emisión inicial del manual con flujo de uso y pantallazos.</td>
+            <td>Equipo PetalOps</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p class="footer">
+        Documento generado para entrega al cliente. Puede imprimirse o distribuirse en formato PDF.
+      </p>
+      <p class="small">Admin PetalOps - Manual de Usuario</p>
+    </main>
+  </body>
+</html>

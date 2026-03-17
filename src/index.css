@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  --font-main: 'Manrope', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', Consolas, monospace;
+  --text: #362b1e;
+  --text-muted: #6f5a44;
+  --surface: rgba(255, 252, 247, 0.92);
+  --surface-border: #e5d0b1;
+  --accent-soft: #ef9f43;
+  --accent-strong: #b85b00;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-main);
+  color: var(--text);
+  background:
+    radial-gradient(circle at 10% 15%, #ffeecf 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, #ffd8a8 0%, transparent 35%),
+    linear-gradient(145deg, #fff9f2 0%, #ffe8c8 100%);
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}

@@ -1,0 +1,39 @@
+"table_name","column_name","data_type","is_nullable","character_maximum_length","is_primary_key","is_foreign_key","referenced_table","referenced_column"
+"Empresa","idEmpresa","bigint","NO",NULL,"YES","NO","Empresa","idEmpresa"
+"Empresa","nombrecomercial","character varying","YES",180,"NO","NO",NULL,NULL
+"Empresa","planid","bigint","YES",NULL,"NO","NO",NULL,NULL
+"Empresa","estado","character varying","NO",20,"NO","NO",NULL,NULL
+"Florista","idFlorista","bigint","NO",NULL,"YES","NO","Florista","idFlorista"
+"Florista","empresaID","bigint","YES",NULL,"NO","NO",NULL,NULL
+"Florista","sucursalID","bigint","YES",NULL,"NO","NO",NULL,NULL
+"Pedido","idPedido","bigint","NO",NULL,"YES","NO","Pedido","idPedido"
+"Pedido","empresaID","bigint","YES",NULL,"NO","NO",NULL,NULL
+"Pedido","estadoPedidoID","bigint","YES",NULL,"NO","NO",NULL,NULL
+"Produccion","idProduccion","bigint","NO",NULL,"YES","NO","Produccion","idProduccion"
+"Produccion","empresaID","bigint","YES",NULL,"NO","NO",NULL,NULL
+"Produccion","sucursalID","bigint","YES",NULL,"NO","NO",NULL,NULL
+"Produccion","pedidoID","bigint","YES",NULL,"NO","NO",NULL,NULL
+"Produccion","floristaID","bigint","YES",NULL,"NO","NO",NULL,NULL
+"Produccion","fechaProgramadaProduccion","date","YES",NULL,"NO","NO",NULL,NULL
+"Produccion","estado","character varying","YES",30,"NO","NO",NULL,NULL
+"Rol","idRol","bigint","NO",NULL,"YES","NO","Rol","idRol"
+"Rol","empresaID","bigint","NO",NULL,"NO","YES","Empresa","idEmpresa"
+"Rol","empresaID","bigint","NO",NULL,"NO","NO","Rol","empresaID"
+"Rol","empresaID","bigint","NO",NULL,"NO","NO","Rol","nombreRol"
+"Rol","nombreRol","character varying","NO",80,"NO","NO","Rol","nombreRol"
+"Rol","nombreRol","character varying","NO",80,"NO","NO","Rol","empresaID"
+"Sucursal","idSucursal","bigint","NO",NULL,"YES","NO","Sucursal","idSucursal"
+"Sucursal","empresaID","bigint","YES",NULL,"NO","NO",NULL,NULL
+"permisomodulo","rolid","bigint","NO",NULL,"YES","NO","permisomodulo","rolid"
+"permisomodulo","rolid","bigint","NO",NULL,"YES","NO","permisomodulo","modulo"
+"permisomodulo","modulo","character varying","NO",80,"YES","NO","permisomodulo","modulo"
+"permisomodulo","modulo","character varying","NO",80,"YES","NO","permisomodulo","rolid"
+"permisomodulo","puedever","boolean","NO",NULL,"NO","NO",NULL,NULL
+"permisomodulo","puedecrear","boolean","NO",NULL,"NO","NO",NULL,NULL
+"permisomodulo","puedeeditar","boolean","NO",NULL,"NO","NO",NULL,NULL
+"permisomodulo","puedeeliminar","boolean","NO",NULL,"NO","NO",NULL,NULL
+"planmodulo","planid","bigint","NO",NULL,"YES","NO","planmodulo","planid"
+"planmodulo","planid","bigint","NO",NULL,"YES","NO","planmodulo","modulo"
+"planmodulo","modulo","character varying","NO",80,"YES","NO","planmodulo","planid"
+"planmodulo","modulo","character varying","NO",80,"YES","NO","planmodulo","modulo"
+"planmodulo","activo","boolean","NO",NULL,"NO","NO",NULL,NULL
