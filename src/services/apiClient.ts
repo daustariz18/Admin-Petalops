@@ -2,7 +2,7 @@ import axios from 'axios'
 import { clearStoredToken, getStoredToken } from '../auth/authStorage'
 
 const RAW_API = (import.meta.env.VITE_API_URL as string | undefined)?.trim() ?? ''
-const API = import.meta.env.DEV ? '' : RAW_API
+const API = import.meta.env.DEV ? '' : RAW_API || 'http://localhost:8000'
 
 let onUnauthorized: (() => void) | null = null
 

@@ -1,7 +1,13 @@
 export interface JwtClaims {
   sub?: string
   email?: string
-  tenantSlug: string
+  tenantSlug?: string
+  tenant_slug?: string
+  slug?: string
+  logoUrl?: string
+  logo_url?: string
+  tenantLogoUrl?: string
+  tenant_logo_url?: string
   empresaID?: string | number
   empresaId?: string | number
   companyId?: string | number
@@ -14,6 +20,7 @@ export interface AuthUser {
   token: string
   tenantSlug: string
   empresaID: string
+  logoUrl?: string
   email?: string
   subject?: string
   exp?: number

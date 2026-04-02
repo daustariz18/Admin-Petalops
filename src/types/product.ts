@@ -5,12 +5,11 @@ export interface CreateProductRequest {
   precio: number
   categoriaID: number
   mimeType: string
+  descripcion?: string
 }
 
 export interface ConfirmProductImageRequest {
   s3Key: string
-  mimeType: string
-  sizeBytes: number
 }
 
 // ── Response types ────────────────────────────────────────────────────────────

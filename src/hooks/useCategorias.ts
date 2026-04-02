@@ -7,10 +7,9 @@ export type Categoria = {
   nombre: string
 }
 
-const RAW_API = (import.meta.env.VITE_API_URL as string | undefined)?.trim() ?? ''
-const API = import.meta.env.DEV ? '' : RAW_API
 const FALLBACK_CATEGORIAS_RAW =
   (import.meta.env.VITE_FALLBACK_CATEGORIAS as string | undefined)?.trim() ?? ''
+const USE_UPLOAD_MOCK = import.meta.env.VITE_USE_UPLOAD_MOCK === 'true'
 
 function assertJsonContentType(contentType: string | null | undefined): void {
   if (!contentType?.includes('application/json')) {
@@ -60,7 +59,7 @@ function parseCreatedCategoriaResponse(payload: unknown): Categoria | null {
   }
 
   if (import.meta.env.DEV) {
-    console.warn('[categorias] Respuesta no reconocida al crear categoría.', { payload })
+    console.warn('[categorias] Respuesta no reconocida al crear categoria.', { payload })
   }
 
   return null
@@ -105,7 +104,7 @@ function normalizeCategorias(payload: unknown): Categoria[] {
         payload,
       })
     } else if (normalized.length < candidate.length) {
-      console.warn('[categorias] Algunos registros fueron descartados por formato inválido.', {
+      console.warn('[categorias] Algunos registros fueron descartados por formato invalido.', {
         sourceLabel,
         recibidos: candidate.length,
         validos: normalized.length,
@@ -130,13 +129,13 @@ function parseFallbackCategorias(raw: string): Categoria[] {
     return normalizeCategorias(payload)
   } catch {
     if (import.meta.env.DEV) {
-      console.warn('[categorias] VITE_FALLBACK_CATEGORIAS tiene JSON inválido.')
+      console.warn('[categorias] VITE_FALLBACK_CATEGORIAS tiene JSON invalido.')
     }
     return []
   }
 }
 
-export function useCategorias() {
+export function useCategorias(empresaID?: string) {
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [categoriasLoading, setCategoriasLoading] = useState(false)
   const [categoriasError, setCategoriasError] = useState('')
@@ -144,32 +143,59 @@ export function useCategorias() {
 
   useEffect(() => {
     const loadCategorias = async () => {
+      const normalizedEmpresaID = empresaID?.trim() ?? ''
+
+      if (!normalizedEmpresaID) {
+        setCategorias([])
+        setCategoriasError('No se pudo identificar la tienda para cargar categorias.')
+        return
+      }
+
       setCategoriasLoading(true)
       setCategoriasError('')
 
       try {
-        const base = API.replace(/\/$/, '')
-        const endpoint = `${base}/categorias`
+        const queryValue = encodeURIComponent(normalizedEmpresaID)
+        const endpoints = [
+          `/categorias?empresa_id=${queryValue}`,
+          `/categorias?empresaID=${queryValue}`,
+          `/admin/categorias?empresa_id=${queryValue}`,
+        ]
         const token = getStoredToken()
 
         const headers: HeadersInit = {
           Accept: 'application/json',
+          'X-Empresa-Id': normalizedEmpresaID,
         }
 
         if (token) {
           headers.Authorization = `Bearer ${token}`
         }
 
-        const response = await fetch(endpoint, {
-          credentials: 'include',
-          headers,
-        })
+        let response: Response | null = null
 
-        if (!response.ok) {
-          if (response.status === 401) {
-            throw new Error('Tu sesión expiró. Inicia sesión nuevamente para ver categorías.')
+        for (const endpoint of endpoints) {
+          const current = await fetch(endpoint, {
+            credentials: 'include',
+            headers,
+          })
+
+          if (current.ok) {
+            response = current
+            break
           }
-          throw new Error(`No se pudieron cargar categorías (${response.status}).`)
+
+          if (current.status === 401) {
+            throw new Error('Tu sesion expiro. Inicia sesion nuevamente para ver categorias.')
+          }
+
+          if (current.status !== 404) {
+            throw new Error(`No se pudieron cargar categorias (${current.status}).`)
+          }
+        }
+
+        if (!response) {
+          throw new Error('No se encontro un endpoint de categorias compatible.')
         }
 
         const contentType = response.headers.get('content-type')
@@ -186,23 +212,27 @@ export function useCategorias() {
           payload = JSON.parse(bodySample) as unknown
         } catch {
           console.warn('[categorias] Invalid response format', response)
-          throw new Error('No se pudo interpretar la respuesta de categorías como JSON.')
+          throw new Error('No se pudo interpretar la respuesta de categorias como JSON.')
         }
 
-        setCategorias(normalizeCategorias(payload))
+        const normalized = normalizeCategorias(payload)
+        setCategorias(normalized)
+        if (normalized.length === 0) {
+          setCategoriasError('No hay categorias registradas para esta tienda.')
+        }
       } catch (error) {
-        const fallback = parseFallbackCategorias(FALLBACK_CATEGORIAS_RAW)
+        const fallback = USE_UPLOAD_MOCK ? parseFallbackCategorias(FALLBACK_CATEGORIAS_RAW) : []
         if (fallback.length > 0) {
           setCategorias(fallback)
           setCategoriasError(
-            'No fue posible cargar categorías del backend. Se muestran categorías de respaldo.',
+            'No fue posible cargar categorias del backend. Se muestran categorias de respaldo.',
           )
         } else {
           setCategorias([])
           setCategoriasError(
             error instanceof Error
               ? error.message
-              : 'No se pudieron cargar las categorías. Intenta nuevamente.',
+              : 'No se pudieron cargar las categorias. Intenta nuevamente.',
           )
         }
       } finally {
@@ -211,28 +241,51 @@ export function useCategorias() {
     }
 
     void loadCategorias()
-  }, [])
+  }, [empresaID])
 
-  const createCategoria = useCallback(async (nombre: string): Promise<Categoria> => {
-    setCreatingCategoria(true)
-
-    try {
-      const response = await apiClient.post('/categorias', { nombre })
-      const contentType = response.headers['content-type'] as string | undefined
-      assertJsonContentType(contentType)
-
-      const parsed = parseCreatedCategoriaResponse(response.data)
-
-      if (!parsed) {
-        throw new Error('Respuesta inválida al crear categoría.')
+  const createCategoria = useCallback(
+    async (nombre: string): Promise<Categoria> => {
+      const normalizedEmpresaID = empresaID?.trim() ?? ''
+      if (!normalizedEmpresaID) {
+        throw new Error('No se pudo identificar la tienda para crear la categoria.')
       }
 
-      setCategorias((prev) => [...prev, parsed])
-      return parsed
-    } finally {
-      setCreatingCategoria(false)
-    }
-  }, [])
+      setCreatingCategoria(true)
+
+      try {
+        const endpoint = `/categorias?empresa_id=${encodeURIComponent(normalizedEmpresaID)}`
+        const response = await apiClient.post(
+          endpoint,
+          { nombre, empresaID: normalizedEmpresaID },
+          {
+            headers: {
+              'X-Empresa-Id': normalizedEmpresaID,
+            },
+          },
+        )
+        const contentType = response.headers['content-type'] as string | undefined
+        assertJsonContentType(contentType)
+
+        const parsed = parseCreatedCategoriaResponse(response.data)
+
+        if (!parsed) {
+          throw new Error('Respuesta invalida al crear categoria.')
+        }
+
+        setCategorias((prev) => {
+          if (prev.some((item) => item.idCategoria === parsed.idCategoria)) {
+            return prev
+          }
+          return [...prev, parsed]
+        })
+        setCategoriasError('')
+        return parsed
+      } finally {
+        setCreatingCategoria(false)
+      }
+    },
+    [empresaID],
+  )
 
   return {
     categorias,

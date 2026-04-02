@@ -1,14 +1,4 @@
-/**
- * productService.ts
- *
- * Funciones puras de API para el flujo "crear producto con imagen".
- * Ninguna importa estado React; son testeables de forma aislada.
- *
- * Flujo:
- *   createProduct()  →  uploadToS3()  →  confirmProductImage()
- * Orquestación completa: createProductWithImage()
- */
-
+import { AxiosError } from 'axios'
 import type {
   ConfirmProductImageRequest,
   ConfirmProductImageResponse,
@@ -16,69 +6,34 @@ import type {
   CreateProductResponse,
   CreateProductResult,
 } from '../types/product'
-import { AxiosError } from 'axios'
 import { apiClient } from './apiClient'
 
 const PRODUCTS_BASE_PATH =
   (import.meta.env.VITE_PRODUCTS_BASE_PATH as string | undefined)?.trim() ||
   '/admin/productos'
 
-function getAlternativePath(path: string): string {
-  if (path.endsWith('/')) {
-    return path.slice(0, -1)
-  }
-
-  return `${path}/`
-}
-
-function getPathVariants(path: string): string[] {
-  const normalized = path.trim() || '/admin/producto'
-  const variants = new Set<string>()
-
-  variants.add(normalized)
-  variants.add(getAlternativePath(normalized))
-
-  if (normalized.includes('/producto')) {
-    const plural = normalized.replace('/producto', '/productos')
-    variants.add(plural)
-    variants.add(getAlternativePath(plural))
-  }
-
-  if (normalized.includes('/productos')) {
-    const singular = normalized.replace('/productos', '/producto')
-    variants.add(singular)
-    variants.add(getAlternativePath(singular))
-  }
-
-  return Array.from(variants)
-}
-
-// Mock mode: si VITE_USE_UPLOAD_MOCK=true no se hace ninguna llamada de red.
 const USE_MOCK = import.meta.env.VITE_USE_UPLOAD_MOCK === 'true'
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// ── Validación de archivo ─────────────────────────────────────────────────────
-
 export const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const
 export type AcceptedMimeType = (typeof ACCEPTED_MIME_TYPES)[number]
 
-const MAX_SIZE_BYTES = 5 * 1024 * 1024 // 5 MB
+const MAX_SIZE_BYTES = 5 * 1024 * 1024
 
-/** Valida tipo MIME y tamaño cliente antes de tocar la red. Devuelve null si ok. */
 export function validateImageFile(file: File): string | null {
   if (!(ACCEPTED_MIME_TYPES as readonly string[]).includes(file.type)) {
     return `Formato no permitido. Usa: ${ACCEPTED_MIME_TYPES.join(', ')}`
   }
+
   if (file.size > MAX_SIZE_BYTES) {
     return `El archivo supera 5 MB (tiene ${(file.size / 1024 / 1024).toFixed(2)} MB).`
   }
+
   return null
 }
-
-// ── Helper interno ────────────────────────────────────────────────────────────
 
 function extractAxiosErrorText(error: unknown): string {
   if (error instanceof AxiosError) {
@@ -89,6 +44,7 @@ function extractAxiosErrorText(error: unknown): string {
       if (typeof detail === 'string' && detail.trim()) {
         return detail
       }
+
       if (detail !== undefined) {
         return JSON.stringify(detail)
       }
@@ -110,13 +66,81 @@ function extractAxiosErrorText(error: unknown): string {
   return 'Error desconocido.'
 }
 
-// ── Funciones puras de API ────────────────────────────────────────────────────
+function normalizeCreateProductResponse(payload: unknown): CreateProductResponse | null {
+  if (!payload || typeof payload !== 'object') return null
 
-/**
- * Step 1 – Crea el producto en backend.
- * La empresa va en el header X-Empresa-Id, NO en el body.
- * Devuelve productoID + signed URL para subir la imagen directo a S3.
- */
+  const source = payload as Record<string, unknown>
+  const nested =
+    source.data && typeof source.data === 'object' ? (source.data as Record<string, unknown>) : null
+  const merged = nested ? { ...source, ...nested } : source
+
+  const productoID = Number(
+    merged.productoID ?? merged.productId ?? merged.productID ?? merged.id,
+  )
+  const uploadUrl = String(
+    merged.uploadUrl ??
+      merged.upload_url ??
+      merged.signedUrl ??
+      merged.signed_url ??
+      merged.presignedUrl ??
+      merged.url ??
+      '',
+  ).trim()
+  const s3Key = String(
+    merged.s3Key ?? merged.s3_key ?? merged.key ?? merged.objectKey ?? '',
+  ).trim()
+  const expiresIn = Number(merged.expiresIn ?? merged.expires_in ?? 300)
+
+  if (!Number.isFinite(productoID) || productoID <= 0) return null
+  if (!uploadUrl || uploadUrl.toLowerCase() === 'undefined') return null
+  if (!s3Key || s3Key.toLowerCase() === 'undefined') return null
+
+  return {
+    productoID,
+    uploadUrl,
+    s3Key,
+    expiresIn: Number.isFinite(expiresIn) ? expiresIn : 300,
+  }
+}
+
+function normalizeConfirmProductImageResponse(
+  productoID: number,
+  payload: unknown,
+  s3Key: string,
+): ConfirmProductImageResponse {
+  if (payload && typeof payload === 'object') {
+    const source = payload as Record<string, unknown>
+    const nested =
+      source.data && typeof source.data === 'object' ? (source.data as Record<string, unknown>) : null
+    const merged = nested ? { ...source, ...nested } : source
+
+    const resolvedProductoID = Number(
+      merged.productoID ?? merged.productId ?? merged.productID ?? merged.id ?? productoID,
+    )
+    const resolvedS3Key = String(
+      merged.imagenS3Key ?? merged.s3Key ?? merged.s3_key ?? s3Key,
+    ).trim()
+    const resolvedImagenUrl = String(
+      merged.imagenUrl ?? merged.url ?? merged.imageUrl ?? '',
+    ).trim()
+
+    return {
+      productoID:
+        Number.isFinite(resolvedProductoID) && resolvedProductoID > 0
+          ? resolvedProductoID
+          : productoID,
+      imagenS3Key: resolvedS3Key || s3Key,
+      imagenUrl: resolvedImagenUrl,
+    }
+  }
+
+  return {
+    productoID,
+    imagenS3Key: s3Key,
+    imagenUrl: '',
+  }
+}
+
 export async function createProduct(
   empresaID: string,
   payload: CreateProductRequest,
@@ -124,7 +148,7 @@ export async function createProduct(
   const normalizedEmpresaID = empresaID.trim()
 
   if (!normalizedEmpresaID) {
-    throw new Error('[Crear producto] Header X-Empresa-Id es requerido.')
+    throw new Error('No se pudo identificar la tienda para guardar el producto.')
   }
 
   if (USE_MOCK) {
@@ -138,57 +162,48 @@ export async function createProduct(
   }
 
   try {
-    const candidatePaths = getPathVariants(PRODUCTS_BASE_PATH)
-    console.info('[createProduct] rutas candidatas:', candidatePaths)
-
-    for (const candidatePath of candidatePaths) {
-      try {
-        console.info('[createProduct] probando ruta:', candidatePath)
-        const response = await apiClient.post<CreateProductResponse>(candidatePath, payload, {
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Empresa-Id': normalizedEmpresaID,
-          },
-        })
-
-        console.info('[createProduct] ruta exitosa:', candidatePath)
-
-        return response.data
-      } catch (error) {
-        if (error instanceof AxiosError && error.response?.status === 404) {
-          console.warn('[createProduct] 404 en ruta:', candidatePath)
-          continue
-        }
-
-        throw new Error(
-          `[Crear producto] fallo en ruta ${candidatePath}: ${extractAxiosErrorText(error)}`,
-        )
-      }
+    const endpoint = `${PRODUCTS_BASE_PATH.replace(/\/$/, '')}?empresa_id=${encodeURIComponent(normalizedEmpresaID)}`
+    const createPayload = {
+      nombre: payload.nombre,
+      precio: payload.precio,
+      categoriaID: payload.categoriaID,
+      descripcion: payload.descripcion?.trim() || '.',
+      mimeType: payload.mimeType,
     }
 
-    throw new Error(
-      `[Crear producto] 404 en rutas probadas: ${candidatePaths.join(', ')}. Ajusta VITE_PRODUCTS_BASE_PATH.`,
-    )
+    const response = await apiClient.post(endpoint, createPayload, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    })
+
+    const parsed = normalizeCreateProductResponse(response.data)
+    if (!parsed) {
+      throw new Error(
+        `[Crear producto] respuesta sin uploadUrl/s3Key/productoID validos: ${JSON.stringify(response.data)}`,
+      )
+    }
+
+    return parsed
   } catch (error) {
-    if (error instanceof Error) {
-      throw error
-    }
-    throw new Error(`[Crear producto] ${extractAxiosErrorText(error)}`)
+    throw new Error(`No se pudo guardar el producto. ${extractAxiosErrorText(error)}`)
   }
 }
 
-/**
- * Step 2 – Sube el archivo binario directo a S3 con la signed URL.
- * No llama al API propio. Si este paso falla, NO se debe llamar confirmación.
- */
 export async function uploadToS3(signedUrl: string, file: File): Promise<void> {
+  const normalizedUrl = (signedUrl ?? '').trim()
+
+  if (!normalizedUrl || normalizedUrl.toLowerCase() === 'undefined' || normalizedUrl.endsWith('/undefined')) {
+    throw new Error('No se pudo preparar la subida de la foto. Intenta nuevamente.')
+  }
+
   if (USE_MOCK) {
     await sleep(800)
     return
   }
 
   try {
-    const response = await fetch(signedUrl, {
+    const response = await fetch(normalizedUrl, {
       method: 'PUT',
       headers: { 'Content-Type': file.type },
       body: file,
@@ -196,44 +211,32 @@ export async function uploadToS3(signedUrl: string, file: File): Promise<void> {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => '')
-      console.log(response.status, errorText)
 
       if (response.status === 403) {
         throw new Error(
-          '[Subir a S3] S3 rechazo la URL firmada (403). Revisa expiracion de URL, permisos IAM/bucket policy y que el Content-Type firmado coincida con el enviado.',
+          'No se pudo subir la foto por un problema de permisos. Intenta de nuevo en unos segundos.',
         )
       }
 
       throw new Error(
-        `[Subir a S3] ${response.status}: no fue posible subir la imagen.${errorText ? ` Detalle: ${errorText}` : ''}`,
+        `No se pudo subir la foto en este momento.${errorText ? ` Detalle: ${errorText}` : ''}`,
       )
     }
   } catch (error) {
-    // Cuando fetch falla en preflight/handshake, el navegador suele lanzar TypeError.
     if (error instanceof TypeError) {
       throw new Error(
-        '[Subir a S3] El navegador bloqueo la subida (CORS/red). Verifica CORS del bucket para permitir PUT desde este origen.',
+        'No se pudo completar la subida de la foto por un problema de conexion.',
       )
     }
+
     throw error
   }
 }
 
-/**
- * Step 3 – Confirma la imagen en backend.
- * productoID viene de la respuesta del step 1; nunca se pide al usuario.
- */
 export async function confirmProductImage(
-  empresaID: string,
   productoID: number,
   payload: ConfirmProductImageRequest,
 ): Promise<ConfirmProductImageResponse> {
-  const normalizedEmpresaID = empresaID.trim()
-
-  if (!normalizedEmpresaID) {
-    throw new Error('[Confirmar imagen] Header X-Empresa-Id es requerido.')
-  }
-
   if (USE_MOCK) {
     await sleep(400)
     return {
@@ -244,56 +247,23 @@ export async function confirmProductImage(
   }
 
   try {
-    const candidatePaths = getPathVariants(PRODUCTS_BASE_PATH).map(
-      (basePath) => `${basePath.replace(/\/$/, '')}/${productoID}/imagen`,
+    const endpoint = `${PRODUCTS_BASE_PATH.replace(/\/$/, '')}/${productoID}/confirm`
+    const response = await apiClient.post(
+      endpoint,
+      { s3Key: payload.s3Key },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      },
     )
-    console.info('[confirmProductImage] rutas candidatas:', candidatePaths)
 
-    for (const candidatePath of candidatePaths) {
-      try {
-        console.info('[confirmProductImage] probando ruta:', candidatePath)
-        const response = await apiClient.post<ConfirmProductImageResponse>(
-          candidatePath,
-          payload,
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Empresa-Id': normalizedEmpresaID,
-            },
-          },
-        )
-
-        console.info('[confirmProductImage] ruta exitosa:', candidatePath)
-
-        return response.data
-      } catch (error) {
-        if (error instanceof AxiosError && error.response?.status === 404) {
-          console.warn('[confirmProductImage] 404 en ruta:', candidatePath)
-          continue
-        }
-
-        throw new Error(
-          `[Confirmar imagen] fallo en ruta ${candidatePath}: ${extractAxiosErrorText(error)}`,
-        )
-      }
-    }
-
-    throw new Error(
-      `[Confirmar imagen] 404 en rutas probadas: ${candidatePaths.join(', ')}. Ajusta VITE_PRODUCTS_BASE_PATH.`,
-    )
+    return normalizeConfirmProductImageResponse(productoID, response.data, payload.s3Key)
   } catch (error) {
-    if (error instanceof Error) {
-      throw error
-    }
-    throw new Error(`[Confirmar imagen] ${extractAxiosErrorText(error)}`)
+    throw new Error(`No se pudo finalizar el guardado de la foto. ${extractAxiosErrorText(error)}`)
   }
 }
 
-/**
- * Orquestador completo.
- * onStepChange notifica al hook en cada transición para actualizar la UI.
- * Garantía: si uploadToS3 falla, confirmProductImage nunca se ejecuta.
- */
 export async function createProductWithImage(
   empresaID: string,
   productPayload: CreateProductRequest,
@@ -304,14 +274,11 @@ export async function createProductWithImage(
   const created = await createProduct(empresaID, productPayload)
 
   onStepChange('uploading')
-  // Si esto lanza, el error se propaga y confirmación nunca se llama.
   await uploadToS3(created.uploadUrl, file)
 
   onStepChange('confirming')
-  const confirmed = await confirmProductImage(empresaID, created.productoID, {
+  const confirmed = await confirmProductImage(created.productoID, {
     s3Key: created.s3Key,
-    mimeType: file.type,
-    sizeBytes: file.size,
   })
 
   return {

@@ -1,27 +1,47 @@
-import { LoginForm } from './components/LoginForm'
 import { useAuth } from './hooks/useAuth'
-import { ProductCreatePage } from './pages/ProductCreatePage'
+import LoginPage from './pages/LoginPage'
+import ProductosPage from './pages/ProductosPage'
 import './App.css'
 
-function App() {
-  const { isAuthenticated, user, logout } = useAuth()
+function normalizeTenantSlug(tenantSlug: string): string {
+  return tenantSlug.trim().toLowerCase()
+}
 
-  if (!isAuthenticated || !user) {
-    return (
-      <main className="app-shell">
-        <section className="card auth-card">
-          <p className="eyebrow">PetalOps Auth</p>
-          <h1>Acceso de tenant</h1>
-          <LoginForm />
-        </section>
-      </main>
-    )
+function resolveTenantSlug(tenantSlug: string, empresaID: string): string {
+  const normalizedEmpresaID = empresaID.trim()
+  const slugByEmpresaID: Record<string, string> = {
+    '3': 'flora',
   }
 
+  return slugByEmpresaID[normalizedEmpresaID] || normalizeTenantSlug(tenantSlug)
+}
+
+function resolveStoreLogoUrl(tenantSlug: string): string {
+  const slug = normalizeTenantSlug(tenantSlug)
+
+  const known: Record<string, string> = {
+    petalops: 'https://ddy2osi8uorg4.cloudfront.net/tenants/petalops/logos/PetalOps+Logo.png',
+    flora: 'https://ddy2osi8uorg4.cloudfront.net/tenants/flora/logos/Flora+Logo.png',
+  }
+
+  if (known[slug]) return known[slug]
+  return `https://ddy2osi8uorg4.cloudfront.net/tenants/${encodeURIComponent(slug)}/logos/${encodeURIComponent(slug)}+Logo.png`
+}
+
+function App() {
+  const { isAuthenticated, user, login, logout } = useAuth()
+
+  if (!isAuthenticated || !user) {
+    return <LoginPage onAuthenticated={login} />
+  }
+  const resolvedTenantSlug = resolveTenantSlug(user.tenantSlug, user.empresaID)
+  const resolvedStoreLogoUrl = resolveStoreLogoUrl(resolvedTenantSlug)
+
   return (
-    <ProductCreatePage
-      tenantSlug={user.tenantSlug}
+    <ProductosPage
       empresaID={user.empresaID}
+      tiendaNombre={resolvedTenantSlug}
+      storeLogoUrl={resolvedStoreLogoUrl}
       onLogout={logout}
     />
   )

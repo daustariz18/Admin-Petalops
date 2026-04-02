@@ -13,8 +13,9 @@ function toStringValue(value: string | number | undefined): string {
 
 function buildUserFromToken(token: string): AuthUser {
   const claims = jwtDecode<JwtClaims>(token)
+  const tenantSlug = claims.tenantSlug ?? claims.tenant_slug ?? claims.slug
 
-  if (!claims.tenantSlug) {
+  if (!tenantSlug) {
     throw new Error('Token invalido: tenantSlug no encontrado.')
   }
 
@@ -30,16 +31,17 @@ function buildUserFromToken(token: string): AuthUser {
 
   return {
     token,
-    tenantSlug: claims.tenantSlug,
+    tenantSlug,
     empresaID,
+    logoUrl: claims.logoUrl ?? claims.logo_url ?? claims.tenantLogoUrl ?? claims.tenant_logo_url,
     email: claims.email,
     subject: claims.sub,
     exp: claims.exp,
   }
 }
 
-function navigateToTenantDashboard(tenantSlug: string): void {
-  const nextPath = `/${tenantSlug}/dashboard`
+function navigateToTenantDashboard(_tenantSlug: string): void {
+  const nextPath = '/products'
   if (window.location.pathname !== nextPath) {
     window.history.pushState({}, '', nextPath)
   }
