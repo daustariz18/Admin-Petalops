@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
@@ -14,16 +14,14 @@
         --bg: #fff7fb;
       }
 
-      * {
-        box-sizing: border-box;
-      }
+      * { box-sizing: border-box; }
 
       body {
         margin: 0;
         font-family: "Segoe UI", Calibri, Arial, sans-serif;
         color: var(--ink);
         background: var(--bg);
-        line-height: 1.45;
+        line-height: 1.46;
       }
 
       .page {
@@ -34,45 +32,14 @@
         padding: 18mm;
       }
 
-      h1,
-      h2,
-      h3 {
-        margin: 0 0 10px;
-        color: #1f2937;
-      }
+      h1, h2, h3 { margin: 0 0 10px; color: #1f2937; }
+      h1 { font-size: 30px; line-height: 1.1; }
+      h2 { font-size: 21px; margin-top: 24px; border-bottom: 2px solid var(--line); padding-bottom: 6px; }
+      h3 { font-size: 17px; margin-top: 14px; }
 
-      h1 {
-        font-size: 30px;
-        line-height: 1.1;
-      }
-
-      h2 {
-        font-size: 21px;
-        margin-top: 24px;
-        border-bottom: 2px solid var(--line);
-        padding-bottom: 6px;
-      }
-
-      h3 {
-        font-size: 17px;
-        margin-top: 14px;
-      }
-
-      p {
-        margin: 0 0 12px;
-        font-size: 14px;
-      }
-
-      ul,
-      ol {
-        margin: 0 0 12px;
-        padding-left: 20px;
-      }
-
-      li {
-        margin-bottom: 7px;
-        font-size: 14px;
-      }
+      p { margin: 0 0 12px; font-size: 14px; }
+      ul, ol { margin: 0 0 12px; padding-left: 20px; }
+      li { margin-bottom: 7px; font-size: 14px; }
 
       .cover {
         border: 1px solid var(--line);
@@ -89,11 +56,7 @@
         gap: 16px;
       }
 
-      .brand-mark {
-        min-width: 170px;
-        text-align: right;
-      }
-
+      .brand-mark { min-width: 170px; text-align: right; }
       .brand-mark__title {
         margin: 0;
         font-size: 18px;
@@ -101,12 +64,7 @@
         letter-spacing: 0.6px;
         color: var(--brand);
       }
-
-      .brand-mark__sub {
-        margin: 2px 0 0;
-        font-size: 11px;
-        color: var(--muted);
-      }
+      .brand-mark__sub { margin: 2px 0 0; font-size: 11px; color: var(--muted); }
 
       .tag {
         display: inline-block;
@@ -114,16 +72,12 @@
         border-radius: 999px;
         font-size: 12px;
         font-weight: 700;
-        letter-spacing: 0.2px;
         color: #7c1f4b;
         background: var(--brand-soft);
         margin-bottom: 10px;
       }
 
-      .meta {
-        color: var(--muted);
-        font-size: 13px;
-      }
+      .meta { color: var(--muted); font-size: 13px; }
 
       .box {
         border-left: 4px solid var(--brand);
@@ -132,10 +86,7 @@
         margin: 12px 0;
       }
 
-      .small {
-        font-size: 12px;
-        color: var(--muted);
-      }
+      .small { font-size: 12px; color: var(--muted); }
 
       .shot {
         margin: 12px 0 18px;
@@ -145,11 +96,10 @@
         background: #fff;
       }
 
-      .shot .placeholder {
-        padding: 26px 14px;
-        background: #f9fafb;
-        color: var(--muted);
-        font-size: 13px;
+      .shot img {
+        display: block;
+        width: 100%;
+        height: auto;
       }
 
       .shot figcaption {
@@ -165,8 +115,7 @@
         margin: 10px 0 14px;
       }
 
-      th,
-      td {
+      th, td {
         border: 1px solid var(--line);
         text-align: left;
         padding: 8px;
@@ -174,15 +123,8 @@
         vertical-align: top;
       }
 
-      th {
-        background: #f8fafc;
-      }
-
-      .doc-control td:first-child {
-        width: 32%;
-        background: #f8fafc;
-        font-weight: 600;
-      }
+      th { background: #f8fafc; }
+      .doc-control td:first-child { width: 32%; background: #f8fafc; font-weight: 600; }
 
       .footer {
         margin-top: 24px;
@@ -192,11 +134,13 @@
         color: var(--muted);
       }
 
-      @media print {
-        body {
-          background: #fff;
-        }
+      .toc a {
+        color: #7c1f4b;
+        text-decoration: none;
+      }
 
+      @media print {
+        body { background: #fff; }
         .page {
           margin: 0;
           width: auto;
@@ -216,240 +160,242 @@
           </div>
           <div class="brand-mark" aria-label="Identidad corporativa">
             <p class="brand-mark__title">PETALOPS</p>
-            <p class="brand-mark__sub">Plataforma SaaS para floristerias</p>
+            <p class="brand-mark__sub">Plataforma SaaS para floristerías</p>
           </div>
         </div>
         <p>
-          Guia operativa para usuarios de tienda que gestionan catalogo de productos: login,
-          listado, filtros, edicion y creacion por fotos.
+          Guía operativa completa para administrar productos de la tienda: inicio de sesión,
+          gestión del catálogo, edición, filtros, creación de productos por fotos y cierre de sesión.
         </p>
         <p class="meta">
-          Version del manual: 2.0<br />
+          Versión del manual: 3.0<br />
           Fecha: 2 de abril de 2026<br />
-          Destinatario: Dueños y administradores de floristerias
+          Destinatario: dueños y administradores de floristerías
         </p>
         <table class="doc-control" aria-label="Control documental">
           <tbody>
             <tr>
-              <td>Codigo de documento</td>
-              <td>MAN-ADM-PETALOPS-002</td>
+              <td>Código de documento</td>
+              <td>MAN-ADM-PETALOPS-003</td>
             </tr>
             <tr>
               <td>Elaborado por</td>
-              <td>Equipo de Implementacion Petalops</td>
+              <td>Equipo de Implementación Petalops</td>
             </tr>
             <tr>
-              <td>Clasificacion</td>
+              <td>Clasificación</td>
               <td>Uso operativo cliente</td>
             </tr>
           </tbody>
         </table>
       </section>
 
-      <h2>1. Objetivo del sistema</h2>
+      <h2>Tabla de contenido</h2>
+      <ol class="toc">
+        <li><a href="#objetivo">Objetivo del sistema</a></li>
+        <li><a href="#requisitos">Requisitos previos</a></li>
+        <li><a href="#login">Inicio de sesión</a></li>
+        <li><a href="#productos">Vista Mis productos</a></li>
+        <li><a href="#nuevo">Vista Nuevo producto</a></li>
+        <li><a href="#categoria">Gestión de categorías</a></li>
+        <li><a href="#errores">Errores frecuentes y soluciones</a></li>
+        <li><a href="#soporte">Soporte</a></li>
+      </ol>
+
+      <h2 id="objetivo">1. Objetivo del sistema</h2>
       <p>
-        Petalops Admin permite entrar a la tienda, visualizar productos existentes, filtrar,
-        editar, activar o desactivar productos, eliminarlos y crear productos nuevos a partir de
-        fotos en un flujo guiado.
+        Petalops Admin permite ingresar a la tienda, visualizar productos existentes, filtrar,
+        editar nombre/precio/categoría, activar o desactivar productos, eliminarlos y crear nuevos
+        productos por carga de imágenes en un flujo guiado.
       </p>
 
-      <h2>2. Requisitos previos</h2>
+      <h2 id="requisitos">2. Requisitos previos</h2>
       <ul>
-        <li>Tener usuario activo y contraseña valida.</li>
-        <li>Contar con internet estable.</li>
-        <li>Usar navegador actualizado (Chrome, Edge o equivalente).</li>
-        <li>Usar imagenes JPEG, PNG o WebP, maximo 5 MB por archivo.</li>
+        <li>Tener usuario activo y contraseña válida.</li>
+        <li>Conexión a internet estable.</li>
+        <li>Navegador actualizado (Chrome, Edge o equivalente).</li>
+        <li>Imágenes en formato JPEG, PNG o WebP.</li>
+        <li>Tamaño máximo por imagen: 5 MB.</li>
       </ul>
 
-      <h2>3. Vista de inicio de sesion</h2>
-      <h3>3.1 Proposito</h3>
+      <h2 id="login">3. Inicio de sesión</h2>
+      <h3>3.1 ¿Qué hace esta pantalla?</h3>
       <p>
-        Permitir acceso seguro a la tienda correspondiente sin exponer datos tecnicos al usuario.
+        Valida el correo y contraseña para permitir acceso a la gestión de productos de la tienda.
       </p>
 
-      <h3>3.2 Pasos</h3>
+      <h3>3.2 Pasos para ingresar</h3>
       <ol>
-        <li>Ingrese su correo.</li>
+        <li>Ingrese su correo electrónico.</li>
         <li>Ingrese su contraseña.</li>
         <li>Pulse <strong>Ingresar</strong>.</li>
       </ol>
 
       <div class="box">
-        El sistema identifica la tienda desde el dominio del correo y, al autenticar correctamente,
-        redirige a la gestion de productos.
+        Si las credenciales son correctas, el sistema redirige automáticamente a <strong>Mis productos</strong>.
       </div>
 
       <figure class="shot">
-        <div class="placeholder">Captura referencial: Pantalla de Login Petalops</div>
-        <figcaption>Pantallazo 1. Inicio de sesion.</figcaption>
+        <img src="manual-assets/pantallazo-login.png" alt="Pantalla de inicio de sesión de Petalops" />
+        <figcaption>Pantallazo 1. Vista de inicio de sesión.</figcaption>
       </figure>
 
-      <h2>4. Vista principal: Mis productos</h2>
-      <h3>4.1 Elementos de la pantalla</h3>
+      <h2 id="productos">4. Vista principal: Mis productos</h2>
+      <h3>4.1 Elementos disponibles</h3>
       <ul>
-        <li>Marca Petalops + logo de la tienda activa (por ejemplo Flora).</li>
-        <li>Titulo <strong>Mis productos</strong> y contador de productos/categorias.</li>
-        <li>Boton <strong>+ Nuevo producto</strong>.</li>
-        <li>Boton <strong>Salir</strong>.</li>
-        <li>Tarjetas de resumen: Total, Activos, Inactivos, Producto mas caro.</li>
+        <li>Marca Petalops y logo de la tienda activa.</li>
+        <li>Título <strong>Mis productos</strong> y contador de productos visibles.</li>
+        <li>Botón <strong>+ Nuevo producto</strong>.</li>
+        <li>Botón <strong>Salir</strong>.</li>
+        <li>Tarjetas de resumen: total, activos, inactivos y producto más caro.</li>
       </ul>
 
-      <h3>4.2 Filtros y busqueda</h3>
+      <h3>4.2 Buscar y filtrar</h3>
       <ul>
-        <li>Busqueda por nombre.</li>
-        <li>Filtro por estado: Todos, Activo, Inactivo.</li>
-        <li>Filtro por categoria.</li>
-        <li>Filtro por rango de precio.</li>
+        <li>Búsqueda por nombre de producto.</li>
+        <li>Filtro por estado: Todos / Activo / Inactivo.</li>
+        <li>Filtro por categoría.</li>
+        <li>Filtro por precio.</li>
       </ul>
 
       <h3>4.3 Acciones por producto</h3>
       <ul>
-        <li><strong>Editar</strong>: abre modal para cambiar nombre, precio y categoria.</li>
-        <li><strong>Eliminar</strong>: abre modal de confirmacion.</li>
+        <li><strong>Editar</strong>: abre modal para cambiar nombre, precio y categoría.</li>
+        <li><strong>Eliminar</strong>: pide confirmación antes de borrar.</li>
         <li><strong>Switch Activo/Inactivo</strong>: cambia el estado del producto.</li>
       </ul>
 
-      <h3>4.4 Feedback visual</h3>
+      <h3>4.4 Confirmaciones visuales</h3>
       <p>
-        Se muestran notificaciones tipo toast para confirmar acciones exitosas o reportar errores.
+        El sistema muestra notificaciones (toasts) al guardar cambios, eliminar, activar o desactivar.
       </p>
 
       <figure class="shot">
-        <div class="placeholder">Captura referencial: Vista Mis productos con cards y filtros</div>
-        <figcaption>Pantallazo 2. Gestion de productos.</figcaption>
+        <img src="manual-assets/pantallazo-productos.png" alt="Vista principal de gestion de productos" />
+        <figcaption>Pantallazo 2. Vista de gestión de productos.</figcaption>
       </figure>
 
-      <h2>5. Vista de nuevo producto (flujo por fotos)</h2>
-      <h3>5.1 Header limpio</h3>
+      <h2 id="nuevo">5. Vista Nuevo producto (flujo por fotos)</h2>
+      <h3>5.1 Encabezado</h3>
       <ul>
-        <li>Boton <strong>Volver</strong>.</li>
-        <li>Titulo <strong>Nuevo producto</strong>.</li>
+        <li>Botón <strong>Volver</strong>.</li>
+        <li>Título <strong>Nuevo producto</strong>.</li>
       </ul>
 
       <h3>5.2 Flujo recomendado</h3>
       <ol>
-        <li>Suba fotos en la zona grande de arrastrar y soltar.</li>
-        <li>Revise la vista previa generada automaticamente.</li>
-        <li>Complete/edite nombre, precio y categoria en cada card.</li>
+        <li>Suba fotos en la zona principal de arrastrar y soltar.</li>
+        <li>Revise el preview de productos generado automáticamente.</li>
+        <li>Complete nombre, precio y categoría en cada tarjeta.</li>
         <li>Pulse <strong>Guardar productos</strong>.</li>
       </ol>
 
       <h3>5.3 Zona de carga</h3>
       <ul>
-        <li>Texto visible: <strong>Arrastra tus fotos o haz clic para subir</strong>.</li>
-        <li>Muestra limite total y cupos disponibles.</li>
+        <li>Mensaje visible: <strong>Arrastra tus fotos o haz clic para subir</strong>.</li>
+        <li>Indica límite total y cupos disponibles.</li>
       </ul>
 
-      <h3>5.4 Estado vacio</h3>
+      <h3>5.4 Estado vacío</h3>
       <p>
-        Si no hay fotos, se muestra un mensaje simple indicando que primero debe subir imagenes.
+        Si no hay imágenes cargadas, aparece un mensaje claro para iniciar por la carga de fotos.
       </p>
 
       <h3>5.5 Footer sticky</h3>
       <ul>
-        <li>Boton <strong>Nueva categoria</strong>.</li>
-        <li>Boton <strong>Guardar productos</strong>.</li>
-        <li>Guardar se habilita cuando hay productos listos y datos minimos completos.</li>
+        <li>Botón <strong>Nueva categoría</strong>.</li>
+        <li>Botón <strong>Guardar productos</strong>.</li>
+        <li>Guardar se deshabilita si no hay productos listos.</li>
       </ul>
 
       <figure class="shot">
-        <div class="placeholder">Captura referencial: Vista Nuevo producto con UploadArea + preview + footer sticky</div>
-        <figcaption>Pantallazo 3. Creacion de productos por fotos.</figcaption>
+        <img src="manual-assets/pantallazo-nuevo-producto.png" alt="Vista de nuevo producto con carga y preview" />
+        <figcaption>Pantallazo 3. Vista Nuevo producto.</figcaption>
       </figure>
 
-      <h2>6. Edicion y eliminacion</h2>
-      <h3>6.1 Modal de edicion</h3>
-      <ul>
-        <li>Campos: Nombre, Precio, Categoria.</li>
-        <li>Valida datos obligatorios antes de guardar.</li>
-      </ul>
-
-      <h3>6.2 Modal de eliminacion</h3>
-      <ul>
-        <li>Solicita confirmacion explicita.</li>
-        <li>Una vez confirmado, elimina el producto de la lista.</li>
-      </ul>
-
-      <h2>7. Cierre de sesion</h2>
+      <h2 id="categoria">6. Gestión de categorías</h2>
       <ol>
-        <li>Pulse <strong>Salir</strong> desde la vista de gestion de productos.</li>
-        <li>El sistema limpia sesion y vuelve a login.</li>
+        <li>Pulse <strong>Nueva categoría</strong> desde el footer sticky.</li>
+        <li>Ingrese el nombre de la categoría.</li>
+        <li>Confirme para guardar.</li>
       </ol>
+      <p>La categoría queda disponible para seleccionar en las tarjetas del preview.</p>
 
-      <h2>8. Mensajes de error y acciones recomendadas</h2>
+      <figure class="shot">
+        <img src="manual-assets/pantallazo-modal-categoria.png" alt="Modal de creación de categoría" />
+        <figcaption>Pantallazo 4. Creación de categoría.</figcaption>
+      </figure>
+
+      <h2 id="errores">7. Errores frecuentes y soluciones</h2>
       <table>
         <thead>
           <tr>
-            <th>Situacion</th>
-            <th>Accion recomendada</th>
+            <th>Situación</th>
+            <th>Acción recomendada</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td>Correo invalido o contraseña incorrecta.</td>
+            <td>Correo o contraseña incorrectos.</td>
             <td>Verifique credenciales e intente nuevamente.</td>
           </tr>
           <tr>
-            <td>No hay categorias para guardar productos.</td>
-            <td>Cree una categoria antes de guardar.</td>
+            <td>No hay categorías para guardar.</td>
+            <td>Cree una categoría antes de guardar productos.</td>
           </tr>
           <tr>
-            <td>Precio invalido o vacio.</td>
+            <td>Precio inválido o vacío.</td>
             <td>Ingrese un valor mayor a 0.</td>
           </tr>
           <tr>
-            <td>Fallo de red/API.</td>
-            <td>Revise conexion y repita la accion.</td>
+            <td>Error de red o backend.</td>
+            <td>Revise conexión e intente de nuevo; si persiste, contacte soporte.</td>
           </tr>
           <tr>
-            <td>CORS o error de backend.</td>
-            <td>Contacte soporte tecnico con el mensaje mostrado.</td>
+            <td>Error CORS.</td>
+            <td>Debe corregirse en backend (permisos de origen para frontend).</td>
           </tr>
         </tbody>
       </table>
 
-      <h2>9. Soporte</h2>
-      <p>Para soporte, comparta siempre:</p>
+      <h2 id="soporte">8. Soporte</h2>
+      <p>Cuando contacte soporte, envíe:</p>
       <ul>
         <li>Fecha y hora del incidente.</li>
         <li>Correo del usuario afectado.</li>
-        <li>Paso exacto donde ocurrio (login, filtros, editar, crear, guardar).</li>
+        <li>Paso exacto donde ocurrió (login, filtro, editar, guardar, etc.).</li>
         <li>Mensaje de error visible en pantalla.</li>
       </ul>
 
-      <h2>10. Historial de cambios del documento</h2>
+      <h2>9. Historial de cambios del manual</h2>
       <table aria-label="Historial de cambios">
         <thead>
           <tr>
-            <th>Version</th>
+            <th>Versión</th>
             <th>Fecha</th>
-            <th>Descripcion del cambio</th>
+            <th>Descripción</th>
             <th>Responsable</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td>2.0</td>
+            <td>3.0</td>
             <td>02/04/2026</td>
-            <td>
-              Actualizacion integral del manual con las vistas actuales: Login,
-              Gestion de productos y Nuevo producto por flujo de fotos.
-            </td>
+            <td>Manual completo con funcionalidades actuales e imágenes visibles.</td>
             <td>Equipo Petalops</td>
           </tr>
           <tr>
-            <td>1.0</td>
-            <td>15/03/2026</td>
-            <td>Version inicial del manual.</td>
+            <td>2.0</td>
+            <td>02/04/2026</td>
+            <td>Actualización general de vistas.</td>
             <td>Equipo Petalops</td>
           </tr>
         </tbody>
       </table>
 
-      <p class="footer">
-        Documento de uso cliente. Recomendado exportar a PDF para distribucion controlada.
-      </p>
+      <p class="footer">Documento de uso cliente. Recomendado exportar y distribuir en PDF.</p>
       <p class="small">Petalops Admin - Manual de Usuario</p>
     </main>
   </body>
 </html>
+
