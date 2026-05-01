@@ -5,6 +5,8 @@ interface NewCategoryDialogProps {
   nombre: string
   error: string
   isSaving: boolean
+  title?: string
+  submitLabel?: string
   onNombreChange: (value: string) => void
   onCancel: () => void
   onSubmit: () => void
@@ -15,6 +17,8 @@ export function NewCategoryDialog({
   nombre,
   error,
   isSaving,
+  title = 'Nueva categoría',
+  submitLabel = 'Guardar',
   onNombreChange,
   onCancel,
   onSubmit,
@@ -50,37 +54,48 @@ export function NewCategoryDialog({
       aria-labelledby="modal-nueva-cat-title"
       onClose={onCancel}
     >
-      <p id="modal-nueva-cat-title" style={{ margin: 0, fontWeight: 700, fontSize: '1.05rem' }}>
-        Nueva categoría
-      </p>
-      <label className="field">
-        <span>Nombre</span>
-        <input
-          type="text"
-          value={nombre}
-          onChange={handleInputChange}
-          placeholder="Ej.: Bodas"
-          disabled={isSaving}
-          onKeyDown={handleInputKeyDown}
-        />
-      </label>
-      {error ? (
-        <p className="pcf-error__message" role="alert">
-          {error}
-        </p>
-      ) : null}
-      <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
-        <button type="button" className="pcf-btn pcf-btn--ghost" onClick={onCancel} disabled={isSaving}>
-          Cancelar
-        </button>
-        <button
-          type="button"
-          className="pcf-btn pcf-btn--primary"
-          onClick={onSubmit}
-          disabled={isSaving || !nombre.trim()}
-        >
-          {isSaving ? 'Guardando…' : 'Guardar'}
-        </button>
+      <div className="pcf-dialog__panel">
+        <header className="pcf-dialog__header">
+          <p className="pcf-dialog__eyebrow">Categorías</p>
+          <div className="pcf-dialog__title-group">
+            <h2 id="modal-nueva-cat-title">{title}</h2>
+            <p className="pcf-dialog__subtitle">
+              Cambia el nombre de forma clara para mantener tu catálogo ordenado.
+            </p>
+          </div>
+        </header>
+
+        <label className="pcf-dialog__field field">
+          <span>Nombre</span>
+          <input
+            type="text"
+            value={nombre}
+            onChange={handleInputChange}
+            placeholder="Ej.: Bodas"
+            disabled={isSaving}
+            onKeyDown={handleInputKeyDown}
+          />
+        </label>
+
+        {error ? (
+          <p className="pcf-error__message pcf-dialog__error" role="alert">
+            {error}
+          </p>
+        ) : null}
+
+        <div className="pcf-dialog__actions">
+          <button type="button" className="pcf-btn pcf-btn--ghost" onClick={onCancel} disabled={isSaving}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="pcf-btn pcf-btn--primary"
+            onClick={onSubmit}
+            disabled={isSaving || !nombre.trim()}
+          >
+            {isSaving ? 'Guardando…' : submitLabel}
+          </button>
+        </div>
       </div>
     </dialog>
   )

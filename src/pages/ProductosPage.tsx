@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { ProductForm } from '../features/products/ProductForm'
 import { useProducts, type ProductItem } from '../features/products/useProducts'
-import { useCategorias } from '../hooks/useCategorias'
+import { useCategorias, type Categoria } from '../hooks/useCategorias'
+import { NewCategoryDialog } from '../components/NewCategoryDialog'
 import './ProductosPage.css'
 
 type FiltroEstado = 'todos' | 'activo' | 'inactivo'
@@ -12,6 +13,11 @@ type ToastState = {
   message: string
   type: ToastType
 } | null
+
+type ProductCategoryGroup = {
+  label: string
+  products: ProductItem[]
+}
 
 type ProductosPageProps = {
   empresaID: string
@@ -72,14 +78,55 @@ function WarningIcon() {
   )
 }
 
+function ProductImage({ src, alt }: { src: string; alt: string }) {
+  const [hasError, setHasError] = useState(false)
+  const isBlob = src.startsWith('blob:')
+  const isInvalidSrc = !src || src === 'undefined' || src === 'null'
+
+  useEffect(() => {
+    setHasError(false)
+  }, [src])
+
+  if (isInvalidSrc || hasError) {
+    return <div className="pp-no-image pp-no-image--card">Sin imagen</div>
+  }
+
+  // blob: URLs are in-memory previews and can expire after navigation/reloads.
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading={isBlob ? 'eager' : 'lazy'}
+      onError={() => setHasError(true)}
+      className="pp-product-image"
+    />
+  )
+}
+
 export default function ProductosPage({
   empresaID,
   tiendaNombre = 'Flora',
   storeLogoUrl,
   onLogout,
 }: ProductosPageProps) {
-  const { products, isLoading, createProduct, updateProduct, toggleProductStatus, removeProduct } = useProducts(empresaID)
-  const { categorias } = useCategorias(empresaID)
+  const {
+    products,
+    isLoading,
+    reloadProducts,
+    updateProduct,
+    toggleProductStatus,
+    removeProduct,
+    replaceProductImage,
+  } = useProducts(empresaID)
+  const {
+    categorias,
+    categoriasLoading,
+    categoriasError,
+    createCategoria,
+    creatingCategoria,
+    updateCategoria,
+    updatingCategoria,
+  } = useCategorias(empresaID)
 
   const [currentView, setCurrentView] = useState<'list' | 'new'>('list')
   const [busqueda, setBusqueda] = useState('')
@@ -90,11 +137,24 @@ export default function ProductosPage({
   const [modalEditar, setModalEditar] = useState<ProductItem | null>(null)
   const [editNombre, setEditNombre] = useState('')
   const [editPrecio, setEditPrecio] = useState('')
+  const [editCodigoProducto, setEditCodigoProducto] = useState('')
+  const [editImageS3Key, setEditImageS3Key] = useState('')
   const [editCategoriaId, setEditCategoriaId] = useState('')
+  const [editDescripcion, setEditDescripcion] = useState('')
   const [editError, setEditError] = useState('')
   const [isSavingEdit, setIsSavingEdit] = useState(false)
+  const [isSavingImage, setIsSavingImage] = useState(false)
+  const [imageError, setImageError] = useState('')
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [toast, setToast] = useState<ToastState>(null)
+  const [categoryToEdit, setCategoryToEdit] = useState<Categoria | null>(null)
+  const [categoryEditName, setCategoryEditName] = useState('')
+  const [categoryEditError, setCategoryEditError] = useState('')
+  const [isSavingCategoryEdit, setIsSavingCategoryEdit] = useState(false)
+  const [categorySearch, setCategorySearch] = useState('')
+  const [isCategoryPanelOpen, setIsCategoryPanelOpen] = useState(false)
+  const [isProductsPanelOpen, setIsProductsPanelOpen] = useState(false)
+  const [openProductGroups, setOpenProductGroups] = useState<string[]>([])
 
   const showToast = (message: string, type: ToastType = 'success') => {
     setToast({ message, type })
@@ -107,21 +167,9 @@ export default function ProductosPage({
   }, [toast])
 
   const logoCandidates = useMemo(() => {
-    const slug = tiendaNombre.trim().toLowerCase()
-    const titleSlug = tiendaNombre.trim()
-    const base = `https://ddy2osi8uorg4.cloudfront.net/tenants/${encodeURIComponent(slug)}/logos`
-
-    const candidates = [
-      storeLogoUrl || '',
-      `${base}/${encodeURIComponent(titleSlug)}+Logo.png`,
-      `${base}/${encodeURIComponent(slug)}+Logo.png`,
-      `${base}/Logo.png`,
-      `${base}/logo.png`,
-      'https://ddy2osi8uorg4.cloudfront.net/tenants/petalops/logos/PetalOps+Logo.png',
-    ].filter(Boolean)
-
+    const candidates = [storeLogoUrl?.trim() || ''].filter(Boolean)
     return Array.from(new Set(candidates))
-  }, [storeLogoUrl, tiendaNombre])
+  }, [storeLogoUrl])
 
   const [logoIndex, setLogoIndex] = useState(0)
   const avatarMenuRef = useRef<HTMLDivElement | null>(null)
@@ -167,6 +215,15 @@ export default function ProductosPage({
     return unique.sort((a, b) => a.localeCompare(b, 'es'))
   }, [products, categorias])
 
+  const categoriasEditables = useMemo(() => {
+    const term = categorySearch.trim().toLowerCase()
+    return [...categorias]
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
+      .filter((categoria) =>
+        term ? `${categoria.nombre} ${categoria.idCategoria}`.toLowerCase().includes(term) : true,
+      )
+  }, [categorias, categorySearch])
+
   const productosFiltrados = useMemo(() => {
     const term = busqueda.trim().toLowerCase()
 
@@ -196,6 +253,33 @@ export default function ProductosPage({
     })
   }, [products, busqueda, filtroEstado, filtroCategoria, filtroPrecio, categorias])
 
+  const productGroups = useMemo<ProductCategoryGroup[]>(() => {
+    const grouped = new Map<string, ProductItem[]>()
+
+    for (const producto of productosFiltrados) {
+      const label = getCategoriaLabel(producto).trim() || 'Sin categoria'
+      const current = grouped.get(label)
+      if (current) {
+        current.push(producto)
+      } else {
+        grouped.set(label, [producto])
+      }
+    }
+
+    return Array.from(grouped.entries())
+      .map(([label, groupedProducts]) => ({
+        label,
+        products: groupedProducts,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'es'))
+  }, [productosFiltrados, categorias])
+
+  const toggleProductGroup = (label: string) => {
+    setOpenProductGroups((current) =>
+      current.includes(label) ? current.filter((item) => item !== label) : [...current, label],
+    )
+  }
+
   const stats = useMemo(() => {
     const total = products.length
     const activos = products.filter((p) => p.estado === 'activo').length
@@ -209,29 +293,132 @@ export default function ProductosPage({
     return { total, activos, inactivos, masCaro }
   }, [products])
 
-  const confirmarEliminar = () => {
+  const confirmarEliminar = async () => {
     if (!modalEliminar) return
-    removeProduct(modalEliminar.id)
+    const result = await removeProduct(modalEliminar.id)
     setModalEliminar(null)
-    showToast('Producto eliminado correctamente.', 'info')
+    if (result === 'deleted') {
+      showToast('Producto eliminado correctamente.', 'info')
+      return
+    }
+
+    if (result === 'backend_locked') {
+      showToast('Solo puedes eliminar productos creados localmente.', 'info')
+      return
+    }
+
+    if (result === 'not_found') {
+      showToast('El producto no existe en esta empresa.', 'info')
+      return
+    }
+
+    showToast('No se pudo eliminar el producto. Intenta de nuevo.', 'error')
   }
 
   const openEditarModal = (producto: ProductItem) => {
     setModalEditar(producto)
     setEditNombre(producto.nombre)
     setEditPrecio(String(producto.precio))
+    setEditCodigoProducto(producto.codigo_producto ?? '')
+    setEditImageS3Key(producto.image_s3_key ?? '')
     const currentCategoriaId =
       (typeof producto.categoriaID === 'number' ? producto.categoriaID : undefined) ??
       (producto.categoria && /^\d+$/.test(producto.categoria) ? Number(producto.categoria) : undefined)
     setEditCategoriaId(currentCategoriaId && Number.isFinite(currentCategoriaId) ? String(currentCategoriaId) : '')
+    setEditDescripcion(producto.descripcion ?? '')
     setEditError('')
+    setImageError('')
     setIsSavingEdit(false)
+    setIsSavingImage(false)
   }
 
   const closeEditarModal = () => {
-    if (isSavingEdit) return
+    if (isSavingEdit || isSavingImage) return
     setModalEditar(null)
     setEditError('')
+    setImageError('')
+  }
+
+  const commitImageUpdate = async (input: { file?: File; s3Key?: string }) => {
+    if (!modalEditar) return
+
+    setIsSavingImage(true)
+    setImageError('')
+
+    try {
+      const result = await replaceProductImage(modalEditar.id, input)
+      setModalEditar((current) =>
+        current ? { ...current, image_url: result.image_url, image_s3_key: result.image_s3_key } : current,
+      )
+      setEditImageS3Key(result.image_s3_key ?? '')
+      showToast('Foto actualizada con exito.', 'success')
+    } catch (error) {
+      const message = error instanceof Error && error.message.trim() ? error.message : 'No se pudo actualizar la foto.'
+      setImageError(message)
+      showToast(message, 'error')
+    } finally {
+      setIsSavingImage(false)
+    }
+  }
+
+  const handleEditImageChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || !modalEditar) return
+
+    await commitImageUpdate({ file })
+  }
+
+  const handleEditImageS3KeySave = async () => {
+    const nextS3Key = editImageS3Key.trim()
+    if (!nextS3Key) {
+      setImageError('Ingresa un s3Key valido.')
+      return
+    }
+
+    await commitImageUpdate({ s3Key: nextS3Key })
+  }
+
+  const openCategoryEditModal = (categoria: Categoria) => {
+    setCategoryToEdit(categoria)
+    setCategoryEditName(categoria.nombre)
+    setCategoryEditError('')
+  }
+
+  const closeCategoryEditModal = () => {
+    if (isSavingCategoryEdit || updatingCategoria) return
+    setCategoryToEdit(null)
+    setCategoryEditName('')
+    setCategoryEditError('')
+  }
+
+  const guardarCategoriaEdicion = async () => {
+    if (!categoryToEdit) return
+
+    const nombre = categoryEditName.trim()
+    if (!nombre) {
+      setCategoryEditError('El nombre es obligatorio.')
+      return
+    }
+
+    setIsSavingCategoryEdit(true)
+    setCategoryEditError('')
+
+    try {
+      await updateCategoria(categoryToEdit.idCategoria, nombre)
+      setToast({ message: 'Categoria actualizada con exito.', type: 'success' })
+      setCategoryToEdit(null)
+      setCategoryEditName('')
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : 'No se pudo actualizar la categoria.'
+      setCategoryEditError(message)
+      setToast({ message, type: 'error' })
+    } finally {
+      setIsSavingCategoryEdit(false)
+    }
   }
 
   const guardarEdicion = async () => {
@@ -240,13 +427,19 @@ export default function ProductosPage({
     const nombre = editNombre.trim()
     const precio = Number(editPrecio)
     const categoriaId = Number(editCategoriaId)
+    const descripcion = editDescripcion.trim()
+    const categoriaSeleccionada = categorias.find((categoria) => categoria.idCategoria === categoriaId)
+    const categoriaActual = getCategoriaLabel(modalEditar).trim().toLowerCase()
+    const isPersonalizados =
+      categoriaSeleccionada?.nombre.trim().toLowerCase() === 'personalizado' ||
+      categoriaActual === 'personalizado'
 
     if (!nombre) {
       setEditError('El nombre es obligatorio.')
       return
     }
 
-    if (!Number.isFinite(precio) || precio <= 0) {
+    if (!Number.isFinite(precio) || (precio < 0 || (precio === 0 && !isPersonalizados))) {
       setEditError('Ingresa un precio valido.')
       return
     }
@@ -256,16 +449,19 @@ export default function ProductosPage({
       return
     }
 
-    const categoriaSeleccionada = categorias.find((categoria) => categoria.idCategoria === categoriaId)
+    const codigoProducto = editCodigoProducto.trim()
+    const categoriaParaEnviar = categoriaSeleccionada?.nombre ?? getCategoriaLabel(modalEditar)
 
     setIsSavingEdit(true)
     setEditError('')
 
     const ok = await updateProduct(modalEditar.id, {
       nombre,
+      codigo_producto: codigoProducto || undefined,
       precio,
       categoriaID: categoriaId,
-      categoria: categoriaSeleccionada?.nombre ?? modalEditar.categoria,
+      categoria: categoriaParaEnviar,
+      descripcion,
     })
 
     setIsSavingEdit(false)
@@ -299,11 +495,47 @@ export default function ProductosPage({
         <section className="pp-container">
           <ProductForm
             empresaID={empresaID}
+            categorias={categorias}
+            categoriasLoading={categoriasLoading}
+            categoriasError={categoriasError}
+            creatingCategoria={creatingCategoria}
+            createCategoria={createCategoria}
             onBack={() => setCurrentView('list')}
             onCreatedMany={(createdProducts) => {
-              createdProducts.forEach((product) => createProduct(product))
-              setCurrentView('list')
-              showToast('Productos creados correctamente.', 'success')
+              void (async () => {
+                const latestProducts = await reloadProducts()
+                setCurrentView('list')
+
+                const directCodes = createdProducts
+                  .map((product) => product.codigo_producto)
+                  .filter((code): code is string => Boolean(code?.trim()))
+
+                const createdBackendIds = createdProducts
+                  .map((product) => product.backend_id)
+                  .filter((id): id is number => typeof id === 'number' && Number.isFinite(id))
+
+                const derivedCodes = latestProducts
+                  .filter((product) => createdBackendIds.includes(product.backend_id ?? -1))
+                  .map((product) => product.codigo_producto)
+                  .filter((code): code is string => Boolean(code?.trim()))
+
+                const codes = Array.from(new Set([...directCodes, ...derivedCodes]))
+
+                if (codes.length === 1) {
+                  showToast(`Producto creado correctamente. Código generado: ${codes[0]}`, 'success')
+                  return
+                }
+
+                if (codes.length > 1) {
+                  showToast(
+                    `Productos creados correctamente. Códigos generados: ${codes.join(', ')}`,
+                    'success',
+                  )
+                  return
+                }
+
+                showToast('Producto creado correctamente.', 'success')
+              })()
             }}
           />
         </section>
@@ -457,14 +689,124 @@ export default function ProductosPage({
           </label>
         </section>
 
+        <section className="pp-category-panel" aria-label="Gestion de categorias">
+          <div className="pp-category-panel__header">
+            <div className="pp-category-panel__header-copy">
+              <p className="pp-category-panel__eyebrow">Categorias</p>
+              <h2>Editar categorias</h2>
+              <p className="pp-category-panel__hint">
+                Aqui puedes cambiar el nombre de una categoria sin volver a crearla.
+              </p>
+            </div>
+            <div className="pp-category-panel__stats">
+              <strong>{categoriasEditables.length}</strong>
+              <span>{categorySearch.trim() ? 'coincidencias' : 'categorias'}</span>
+            </div>
+            <button
+              type="button"
+              className="pp-category-panel__toggle"
+              onClick={() => setIsCategoryPanelOpen((current) => !current)}
+              aria-expanded={isCategoryPanelOpen}
+              aria-controls="categories-accordion"
+            >
+              <span>{isCategoryPanelOpen ? 'Ocultar' : 'Mostrar'}</span>
+              <svg
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                className={`pp-category-panel__chevron ${isCategoryPanelOpen ? 'is-open' : ''}`}
+              >
+                <path
+                  d="M6 9l6 6 6-6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.9"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
+
+          <div
+            id="categories-accordion"
+            className={`pp-category-panel__body ${isCategoryPanelOpen ? 'is-open' : ''}`}
+            aria-hidden={!isCategoryPanelOpen}
+          >
+            <div className="pp-category-panel__body-inner">
+              <div className="pp-category-panel__toolbar">
+                <label className="pp-input-wrap pp-input-wrap--search pp-category-panel__search">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" className="pp-search-icon">
+                    <path
+                      d="M11 4a7 7 0 015.4 11.5L20 19"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                  </svg>
+                  <input
+                    type="search"
+                    placeholder="Buscar categoria..."
+                    value={categorySearch}
+                    onChange={(event) => setCategorySearch(event.target.value)}
+                  />
+                </label>
+                <p className="pp-category-panel__toolbar-note">
+                  Busca una categoria por nombre o por ID para encontrarla mas rapido.
+                </p>
+              </div>
+
+              {categorias.length === 0 ? (
+                <p className="pp-category-panel__empty">No hay categorias cargadas para esta tienda.</p>
+              ) : categoriasEditables.length === 0 ? (
+                <p className="pp-category-panel__empty">
+                  No encontramos coincidencias con tu busqueda.
+                </p>
+              ) : (
+                <div className="pp-category-panel__list">
+                  {categoriasEditables.map((categoria, index) => (
+                    <article key={categoria.idCategoria} className="pp-category-row">
+                      <div className="pp-category-row__index">{String(index + 1).padStart(2, '0')}</div>
+                      <div className="pp-category-row__copy">
+                        <div className="pp-category-row__title">
+                          <strong>{categoria.nombre}</strong>
+                          {categoria.nombre.trim().toLowerCase() === 'personalizado' ? (
+                            <span className="pp-category-row__badge">Especial</span>
+                          ) : null}
+                        </div>
+                        <span>ID {categoria.idCategoria}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="pp-btn pp-btn--ghost pp-category-row__button"
+                        onClick={() => openCategoryEditModal(categoria)}
+                      >
+                        Editar
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
         {isLoading ? (
-          <section className="pp-products-grid" aria-label="Cargando productos">
+          <section
+            className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 justify-items-center"
+            aria-label="Cargando productos"
+          >
             {Array.from({ length: 6 }).map((_, index) => (
-              <article key={`skeleton-${index}`} className="pp-product-card pp-product-card--skeleton">
-                <div className="pp-skeleton pp-skeleton--image" />
-                <div className="pp-product-info">
-                  <div className="pp-skeleton pp-skeleton--line" />
-                  <div className="pp-skeleton pp-skeleton--line short" />
+              <article
+                key={`skeleton-${index}`}
+                className="w-full max-w-[250px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md"
+              >
+                <div className="h-[200px] w-full animate-pulse bg-slate-200" />
+                <div className="flex flex-col gap-3 p-3">
+                  <div className="h-3 w-3/4 animate-pulse rounded bg-slate-200" />
+                  <div className="h-3 w-1/2 animate-pulse rounded bg-slate-200" />
                 </div>
               </article>
             ))}
@@ -491,53 +833,173 @@ export default function ProductosPage({
             </button>
           </section>
         ) : (
-          <section className="pp-products-grid" aria-label="Tarjetas de productos">
-            {productosFiltrados.map((producto) => (
-              <article key={producto.id} className="pp-product-card">
-                <div className="pp-image-wrap">
-                  {producto.image_url ? (
-                    <img src={producto.image_url} alt={producto.nombre} loading="lazy" />
-                  ) : (
-                    <div className="pp-no-image">Sin imagen</div>
-                  )}
-                  <span className={`pp-status-badge ${producto.estado === 'activo' ? 'is-active' : 'is-inactive'}`}>
-                    {producto.estado === 'activo' ? 'Activo' : 'Inactivo'}
-                  </span>
+          <section className="pp-products-accordion" aria-label="Catalogo de productos por categoria">
+            <div className="pp-products-accordion__header">
+              <div className="pp-products-accordion__header-copy">
+                <p className="pp-products-accordion__eyebrow">Catalogo</p>
+                <h2>Productos por categoria</h2>
+                <p className="pp-products-accordion__hint">
+                  Revisa tus productos por categoria y abre solo los que quieras ver.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="pp-products-accordion__toggle"
+                onClick={() => setIsProductsPanelOpen((current) => !current)}
+                aria-expanded={isProductsPanelOpen}
+                aria-controls="products-accordion"
+              >
+                <span>{isProductsPanelOpen ? 'Ocultar' : 'Mostrar'}</span>
+                <svg
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  className={`pp-products-accordion__chevron ${isProductsPanelOpen ? 'is-open' : ''}`}
+                >
+                  <path
+                    d="M6 9l6 6 6-6"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.9"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+
+            <div
+              id="products-accordion"
+              className={`pp-products-accordion__body ${isProductsPanelOpen ? 'is-open' : ''}`}
+              aria-hidden={!isProductsPanelOpen}
+            >
+              <div className="pp-products-accordion__body-inner">
+                <div className="pp-products-accordion__stats">
+                  <strong>{productGroups.length}</strong>
+                  <span>categorias visibles</span>
                 </div>
 
-                <div className="pp-product-info">
-                  <h3 title={producto.nombre}>{producto.nombre}</h3>
-                  <p>{formatCop(producto.precio)}</p>
-                  <span className="pp-category-tag">{getCategoriaLabel(producto)}</span>
-
-                  <div className="pp-card-actions">
-                    <button type="button" className="pp-btn pp-btn--outline" onClick={() => openEditarModal(producto)}>
-                      Editar
-                    </button>
-
-                    <div className="pp-card-actions-right">
+                {productGroups.map((group) => {
+                  const isOpen = openProductGroups.includes(group.label)
+                  return (
+                    <article key={group.label} className="pp-product-group">
                       <button
                         type="button"
-                        className="pp-icon-btn"
-                        aria-label="Eliminar producto"
-                        onClick={() => setModalEliminar(producto)}
+                        className="pp-product-group__header"
+                        onClick={() => toggleProductGroup(group.label)}
+                        aria-expanded={isOpen}
+                        aria-controls={`group-${group.label.replace(/\s+/g, '-').toLowerCase()}`}
                       >
-                        <TrashIcon />
+                        <div className="pp-product-group__copy">
+                          <strong>{group.label}</strong>
+                          <span>{group.products.length} producto(s)</span>
+                        </div>
+                        <div className="pp-product-group__actions">
+                          <span className="pp-product-group__badge">
+                            {isOpen ? 'Abierto' : 'Plegado'}
+                          </span>
+                          <svg
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                            className={`pp-product-group__chevron ${isOpen ? 'is-open' : ''}`}
+                          >
+                            <path
+                              d="M6 9l6 6 6-6"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.9"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
                       </button>
 
-                      <button
-                        type="button"
-                        className={`pp-switch ${producto.estado === 'activo' ? 'is-on' : 'is-off'}`}
-                        aria-label={producto.estado === 'activo' ? 'Desactivar producto' : 'Activar producto'}
-                        onClick={() => void handleToggleStatus(producto)}
+                      <div
+                        id={`group-${group.label.replace(/\s+/g, '-').toLowerCase()}`}
+                        className={`pp-product-group__body ${isOpen ? 'is-open' : ''}`}
+                        aria-hidden={!isOpen}
                       >
-                        <span className="pp-switch-thumb" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </article>
-            ))}
+                        <div className="pp-product-group__body-inner">
+                          <section className="pp-products-grid" aria-label={`Productos de ${group.label}`}>
+                            {isOpen
+                              ? group.products.map((producto) => (
+                                  <article
+                                    key={producto.id}
+                                    className="pp-product-card pp-product-card--catalog"
+                                  >
+                                    <div className="pp-product-media">
+                                      <ProductImage src={producto.image_url} alt={producto.nombre} />
+                                      <div className="pp-product-media__overlay">
+                                        <span
+                                          className={`pp-status-badge ${
+                                            producto.estado === 'activo' ? 'is-active' : 'is-inactive'
+                                          }`}
+                                        >
+                                          {producto.estado === 'activo' ? 'Activo' : 'Inactivo'}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="pp-product-info">
+                                      {producto.codigo_producto ? (
+                                        <span className="pp-code-badge">{producto.codigo_producto}</span>
+                                      ) : null}
+
+                                      <h3 className="pp-product-title" title={producto.nombre}>
+                                        {producto.nombre}
+                                      </h3>
+                                      <div className="pp-product-meta">
+                                        <p className="pp-product-price">{formatCop(producto.precio)}</p>
+                                        <span className="pp-category-tag">{getCategoriaLabel(producto)}</span>
+                                      </div>
+
+                                      <div className="pp-card-actions">
+                                        <div className="pp-card-actions__main">
+                                          <button
+                                            type="button"
+                                            className="pp-btn pp-btn--outline"
+                                            onClick={() => openEditarModal(producto)}
+                                          >
+                                            Editar
+                                          </button>
+
+                                          <button
+                                            type="button"
+                                            className="pp-btn pp-btn--danger-soft"
+                                            onClick={() => setModalEliminar(producto)}
+                                          >
+                                            <TrashIcon />
+                                            <span>Eliminar</span>
+                                          </button>
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          className={`pp-switch ${
+                                            producto.estado === 'activo' ? 'is-on' : 'is-off'
+                                          }`}
+                                          aria-label={
+                                            producto.estado === 'activo'
+                                              ? 'Desactivar producto'
+                                              : 'Activar producto'
+                                          }
+                                          onClick={() => void handleToggleStatus(producto)}
+                                        >
+                                          <span className="pp-switch-thumb" />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </article>
+                                ))
+                              : null}
+                          </section>
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            </div>
           </section>
         )}
       </section>
@@ -553,7 +1015,7 @@ export default function ProductosPage({
               <button type="button" className="pp-btn pp-btn--ghost" onClick={() => setModalEliminar(null)}>
                 Cancelar
               </button>
-              <button type="button" className="pp-btn pp-btn--danger" onClick={confirmarEliminar}>
+              <button type="button" className="pp-btn pp-btn--danger" onClick={() => void confirmarEliminar()}>
                 Si, eliminar
               </button>
             </div>
@@ -565,8 +1027,59 @@ export default function ProductosPage({
         <div className="pp-modal" role="dialog" aria-modal="true" aria-label="Editar producto">
           <div className="pp-modal-overlay" onClick={closeEditarModal} />
           <div className="pp-modal-card pp-modal-card--edit">
-            <h3>Editar producto</h3>
-            <p>Actualiza la informacion principal del producto.</p>
+            <header className="pp-modal-card__header">
+              <p className="pp-modal-card__eyebrow">Producto</p>
+              <h3>Editar producto</h3>
+              <p>Actualiza la informacion principal del producto.</p>
+            </header>
+
+            <div className="pp-edit-image">
+              {modalEditar.image_url ? (
+                <img src={modalEditar.image_url} alt={modalEditar.nombre} className="pp-edit-image__preview" />
+              ) : (
+                <div className="pp-edit-image__empty">Sin imagen</div>
+              )}
+              <div className="pp-edit-image__section">
+                <div className="pp-edit-image__section-head">
+                  <strong>Subir nueva foto</strong>
+                  <span>Reemplaza la imagen usando un archivo.</span>
+                </div>
+                <label className="pp-edit-image__button">
+                  <span>{isSavingImage ? 'Actualizando foto...' : 'Elegir archivo'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(event) => void handleEditImageChange(event)}
+                    disabled={isSavingEdit || isSavingImage}
+                  />
+                </label>
+              </div>
+              <div className="pp-edit-image__section">
+                <div className="pp-edit-image__section-head">
+                  <strong>Reasociar por s3Key</strong>
+                  <span>Usa esta opción si ya tienes la ruta guardada en S3.</span>
+                </div>
+                <label className="pp-form-field">
+                  <span>S3 Key de imagen</span>
+                  <input
+                    type="text"
+                    value={editImageS3Key}
+                    onChange={(event) => setEditImageS3Key(event.target.value)}
+                    disabled={isSavingEdit || isSavingImage}
+                    placeholder="tenants/flora/productos/123/imagen.jpg"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="pp-btn pp-btn--ghost"
+                  onClick={() => void handleEditImageS3KeySave()}
+                  disabled={isSavingEdit || isSavingImage}
+                >
+                  {isSavingImage ? 'Guardando...' : 'Reasociar imagen'}
+                </button>
+              </div>
+              <small>Si el backend responde con error, la imagen actual no se reemplaza y se muestra el mensaje devuelto.</small>
+            </div>
 
             <label className="pp-form-field">
               <span>Nombre</span>
@@ -591,6 +1104,17 @@ export default function ProductosPage({
             </label>
 
             <label className="pp-form-field">
+              <span>Código del producto</span>
+              <input
+                type="text"
+                value={editCodigoProducto}
+                onChange={(event) => setEditCodigoProducto(event.target.value)}
+                disabled={isSavingEdit}
+                placeholder="Ej: PROD-001"
+              />
+            </label>
+
+            <label className="pp-form-field">
               <span>Categoria</span>
               <select
                 value={editCategoriaId}
@@ -606,7 +1130,19 @@ export default function ProductosPage({
               </select>
             </label>
 
+            <label className="pp-form-field">
+              <span>Descripcion</span>
+              <textarea
+                value={editDescripcion}
+                onChange={(event) => setEditDescripcion(event.target.value)}
+                disabled={isSavingEdit}
+                rows={4}
+                placeholder="Agrega una descripcion para el producto"
+              />
+            </label>
+
             {editError ? <p className="pp-form-error">{editError}</p> : null}
+            {imageError ? <p className="pp-form-error">{imageError}</p> : null}
 
             <div className="pp-modal-actions">
               <button type="button" className="pp-btn pp-btn--ghost" onClick={closeEditarModal} disabled={isSavingEdit}>
@@ -616,7 +1152,7 @@ export default function ProductosPage({
                 type="button"
                 className="pp-btn pp-btn--primary"
                 onClick={() => void guardarEdicion()}
-                disabled={isSavingEdit}
+                disabled={isSavingEdit || isSavingImage}
               >
                 {isSavingEdit ? 'Guardando...' : 'Guardar cambios'}
               </button>
@@ -624,6 +1160,21 @@ export default function ProductosPage({
           </div>
         </div>
       ) : null}
+
+      <NewCategoryDialog
+        open={Boolean(categoryToEdit)}
+        nombre={categoryEditName}
+        error={categoryEditError}
+        isSaving={isSavingCategoryEdit}
+        title="Editar categoría"
+        submitLabel="Guardar cambios"
+        onNombreChange={(value) => {
+          setCategoryEditName(value)
+          if (categoryEditError) setCategoryEditError('')
+        }}
+        onCancel={closeCategoryEditModal}
+        onSubmit={() => void guardarCategoriaEdicion()}
+      />
 
       {toast ? (
         <div className={`pp-toast pp-toast--${toast.type}`} role="status" aria-live="polite">

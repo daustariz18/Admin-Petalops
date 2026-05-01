@@ -1,8 +1,8 @@
 import axios from 'axios'
 import { clearStoredToken, getStoredToken } from '../auth/authStorage'
+import { getApiBaseUrl } from './apiUrl'
 
-const RAW_API = (import.meta.env.VITE_API_URL as string | undefined)?.trim() ?? ''
-const API = import.meta.env.DEV ? '' : RAW_API || 'http://localhost:8000'
+const API = getApiBaseUrl()
 
 let onUnauthorized: (() => void) | null = null
 
@@ -22,6 +22,10 @@ function assertJsonContentType(contentType: string | null | undefined): void {
 }
 
 apiClient.interceptors.request.use((config) => {
+  if (!API) {
+    return Promise.reject(new Error('La variable VITE_API_URL no esta configurada.'))
+  }
+
   const token = getStoredToken()
 
   if (token) {

@@ -1,15 +1,23 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getStoredToken } from '../auth/authStorage'
 import { apiClient } from '../services/apiClient'
+import { buildApiUrl } from '../services/apiUrl'
+import { updateCategory as updateCategoryRequest } from '../services/categoryService'
 
 export type Categoria = {
   idCategoria: number
   nombre: string
 }
 
+type CategoryCacheEntry = {
+  items: Categoria[]
+  loadedAt: number
+}
+
 const FALLBACK_CATEGORIAS_RAW =
   (import.meta.env.VITE_FALLBACK_CATEGORIAS as string | undefined)?.trim() ?? ''
 const USE_UPLOAD_MOCK = import.meta.env.VITE_USE_UPLOAD_MOCK === 'true'
+const categoriasCache = new Map<string, CategoryCacheEntry>()
 
 function assertJsonContentType(contentType: string | null | undefined): void {
   if (!contentType?.includes('application/json')) {
@@ -22,13 +30,16 @@ function parseCategoria(value: unknown): Categoria | null {
 
   const source = value as {
     idCategoria?: unknown
+    id_categoria?: unknown
     id?: unknown
     categoriaID?: unknown
+    categoria_id?: unknown
     nombre?: unknown
     name?: unknown
   }
 
-  const rawId = source.idCategoria ?? source.id ?? source.categoriaID
+  const rawId =
+    source.idCategoria ?? source.id_categoria ?? source.id ?? source.categoriaID ?? source.categoria_id
   const rawNombre = source.nombre ?? source.name
 
   const idCategoria = Number(rawId)
@@ -58,34 +69,24 @@ function parseCreatedCategoriaResponse(payload: unknown): Categoria | null {
     if (fromItem) return fromItem
   }
 
-  if (import.meta.env.DEV) {
-    console.warn('[categorias] Respuesta no reconocida al crear categoria.', { payload })
-  }
-
   return null
 }
 
 function normalizeCategorias(payload: unknown): Categoria[] {
-  let sourceLabel = 'empty'
-
   const candidate = (() => {
     if (Array.isArray(payload)) {
-      sourceLabel = 'array'
       return payload
     }
 
     if (payload && typeof payload === 'object') {
       const record = payload as { categorias?: unknown; data?: unknown; items?: unknown }
       if (Array.isArray(record.categorias)) {
-        sourceLabel = 'categorias'
         return record.categorias
       }
       if (Array.isArray(record.data)) {
-        sourceLabel = 'data'
         return record.data
       }
       if (Array.isArray(record.items)) {
-        sourceLabel = 'items'
         return record.items
       }
     }
@@ -97,27 +98,6 @@ function normalizeCategorias(payload: unknown): Categoria[] {
     .map((item) => parseCategoria(item))
     .filter((item): item is Categoria => item !== null)
 
-  if (import.meta.env.DEV) {
-    if (candidate.length > 0 && normalized.length === 0) {
-      console.warn('[categorias] Payload recibido pero no se pudo normalizar.', {
-        sourceLabel,
-        payload,
-      })
-    } else if (normalized.length < candidate.length) {
-      console.warn('[categorias] Algunos registros fueron descartados por formato invalido.', {
-        sourceLabel,
-        recibidos: candidate.length,
-        validos: normalized.length,
-        payload,
-      })
-    } else if (candidate.length === 0 && payload !== null && payload !== undefined) {
-      console.warn('[categorias] Formato de respuesta no reconocido.', {
-        sourceLabel,
-        payload,
-      })
-    }
-  }
-
   return normalized
 }
 
@@ -128,11 +108,32 @@ function parseFallbackCategorias(raw: string): Categoria[] {
     const payload = JSON.parse(raw) as unknown
     return normalizeCategorias(payload)
   } catch {
-    if (import.meta.env.DEV) {
-      console.warn('[categorias] VITE_FALLBACK_CATEGORIAS tiene JSON invalido.')
-    }
     return []
   }
+}
+
+function buildCategoryEndpoints(empresaID: string): string[] {
+  const queryValue = encodeURIComponent(empresaID)
+  return [
+    buildApiUrl(`/categorias?empresa_id=${queryValue}`),
+    buildApiUrl(`/categorias?empresaID=${queryValue}`),
+    buildApiUrl('/categorias'),
+    buildApiUrl(`/categories?empresa_id=${queryValue}`),
+    buildApiUrl(`/categories?empresaID=${queryValue}`),
+    buildApiUrl('/categories'),
+  ]
+}
+
+function getCachedCategorias(empresaID: string): Categoria[] | null {
+  const cached = categoriasCache.get(empresaID)
+  return cached?.items ?? null
+}
+
+function storeCategoriasCache(empresaID: string, items: Categoria[]): void {
+  categoriasCache.set(empresaID, {
+    items,
+    loadedAt: Date.now(),
+  })
 }
 
 export function useCategorias(empresaID?: string) {
@@ -140,6 +141,7 @@ export function useCategorias(empresaID?: string) {
   const [categoriasLoading, setCategoriasLoading] = useState(false)
   const [categoriasError, setCategoriasError] = useState('')
   const [creatingCategoria, setCreatingCategoria] = useState(false)
+  const [updatingCategoria, setUpdatingCategoria] = useState(false)
 
   useEffect(() => {
     const loadCategorias = async () => {
@@ -151,18 +153,18 @@ export function useCategorias(empresaID?: string) {
         return
       }
 
+      const cached = getCachedCategorias(normalizedEmpresaID)
+      if (cached) {
+        setCategorias(cached)
+        setCategoriasError('')
+        return
+      }
+
       setCategoriasLoading(true)
       setCategoriasError('')
 
       try {
-        const queryValue = encodeURIComponent(normalizedEmpresaID)
-        const endpoints = [
-          `/categorias?empresa_id=${queryValue}`,
-          `/categorias?empresaID=${queryValue}`,
-          `/admin/categorias?empresa_id=${queryValue}`,
-        ]
         const token = getStoredToken()
-
         const headers: HeadersInit = {
           Accept: 'application/json',
           'X-Empresa-Id': normalizedEmpresaID,
@@ -172,6 +174,7 @@ export function useCategorias(empresaID?: string) {
           headers.Authorization = `Bearer ${token}`
         }
 
+        const endpoints = buildCategoryEndpoints(normalizedEmpresaID)
         let response: Response | null = null
 
         for (const endpoint of endpoints) {
@@ -195,15 +198,22 @@ export function useCategorias(empresaID?: string) {
         }
 
         if (!response) {
+          const fallback = USE_UPLOAD_MOCK ? parseFallbackCategorias(FALLBACK_CATEGORIAS_RAW) : []
+          if (fallback.length > 0) {
+            setCategorias(fallback)
+            storeCategoriasCache(normalizedEmpresaID, fallback)
+            setCategoriasError(
+              'No fue posible cargar categorias del backend. Se muestran categorias de respaldo.',
+            )
+            return
+          }
+
           throw new Error('No se encontro un endpoint de categorias compatible.')
         }
 
         const contentType = response.headers.get('content-type')
         const bodySample = await response.clone().text()
 
-        if (bodySample.trim().startsWith('<')) {
-          console.warn('[categorias] Invalid response format', response)
-        }
         assertJsonContentType(contentType)
 
         let payload: unknown
@@ -211,12 +221,12 @@ export function useCategorias(empresaID?: string) {
         try {
           payload = JSON.parse(bodySample) as unknown
         } catch {
-          console.warn('[categorias] Invalid response format', response)
           throw new Error('No se pudo interpretar la respuesta de categorias como JSON.')
         }
 
         const normalized = normalizeCategorias(payload)
         setCategorias(normalized)
+        storeCategoriasCache(normalizedEmpresaID, normalized)
         if (normalized.length === 0) {
           setCategoriasError('No hay categorias registradas para esta tienda.')
         }
@@ -224,6 +234,7 @@ export function useCategorias(empresaID?: string) {
         const fallback = USE_UPLOAD_MOCK ? parseFallbackCategorias(FALLBACK_CATEGORIAS_RAW) : []
         if (fallback.length > 0) {
           setCategorias(fallback)
+          storeCategoriasCache(normalizedEmpresaID, fallback)
           setCategoriasError(
             'No fue posible cargar categorias del backend. Se muestran categorias de respaldo.',
           )
@@ -255,7 +266,7 @@ export function useCategorias(empresaID?: string) {
       try {
         const endpoint = `/categorias?empresa_id=${encodeURIComponent(normalizedEmpresaID)}`
         const response = await apiClient.post(
-          endpoint,
+          buildApiUrl(endpoint),
           { nombre, empresaID: normalizedEmpresaID },
           {
             headers: {
@@ -276,7 +287,9 @@ export function useCategorias(empresaID?: string) {
           if (prev.some((item) => item.idCategoria === parsed.idCategoria)) {
             return prev
           }
-          return [...prev, parsed]
+          const next = [...prev, parsed]
+          storeCategoriasCache(normalizedEmpresaID, next)
+          return next
         })
         setCategoriasError('')
         return parsed
@@ -287,11 +300,56 @@ export function useCategorias(empresaID?: string) {
     [empresaID],
   )
 
+  const updateCategoria = useCallback(
+    async (idCategoria: number, nombre: string): Promise<Categoria> => {
+      const normalizedEmpresaID = empresaID?.trim() ?? ''
+
+      if (!normalizedEmpresaID) {
+        throw new Error('No se pudo identificar la tienda para actualizar la categoria.')
+      }
+
+      setUpdatingCategoria(true)
+
+      try {
+        const updated = await updateCategoryRequest(idCategoria, nombre, normalizedEmpresaID)
+        const nextCategoria: Categoria = {
+          idCategoria: updated.idCategoria,
+          nombre: updated.nombre,
+        }
+
+        setCategorias((prev) =>
+          prev.map((categoria) =>
+            categoria.idCategoria === idCategoria ? nextCategoria : categoria,
+          ),
+        )
+        storeCategoriasCache(
+          normalizedEmpresaID,
+          categorias.map((categoria) =>
+            categoria.idCategoria === idCategoria ? nextCategoria : categoria,
+          ),
+        )
+        setCategoriasError('')
+        return nextCategoria
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message
+            : 'No se pudo actualizar la categoria.'
+        throw new Error(message)
+      } finally {
+        setUpdatingCategoria(false)
+      }
+    },
+    [empresaID, categorias],
+  )
+
   return {
     categorias,
     categoriasLoading,
     categoriasError,
     creatingCategoria,
+    updatingCategoria,
     createCategoria,
+    updateCategoria,
   }
 }

@@ -1,6 +1,5 @@
-﻿import { FormEvent, useMemo, useState } from 'react'
-import { AxiosError } from 'axios'
-import { apiClient } from '../services/apiClient'
+import { FormEvent, useState } from 'react'
+import { buildApiUrl, hasApiBaseUrl } from '../services/apiUrl'
 import './LoginPage.css'
 
 type FieldErrors = {
@@ -14,31 +13,33 @@ type LoginPageProps = {
 
 type LoginResponse = {
   access_token?: string
+  detail?: string
 }
 
 const EMAIL_REGEX = /\S+@\S+\.\S+/
 
+const PETALOPS_LOGO_CANDIDATES = [
+  'https://ddy2osi8uorg4.cloudfront.net/tenants/petalops/logos/PetalOps+Logo.png',
+  'https://ddy2osi8uorg4.cloudfront.net/tenants/petalops/logos/PetalOps%20Logo.png',
+  'https://ddy2osi8uorg4.cloudfront.net/tenants/petalops/logos/logo.png',
+  '/petalops-logo.svg',
+]
+
 function inferTenantSlugFromEmail(email: string): string {
-  const normalizedEmail = email.trim().toLowerCase()
-  const atIndex = normalizedEmail.lastIndexOf('@')
-  if (atIndex < 0 || atIndex === normalizedEmail.length - 1) {
+  try {
+    const domain = email.trim().toLowerCase().split('@')[1]
+    if (!domain) return ''
+    return domain.split('.')[0] ?? ''
+  } catch {
     return ''
   }
-
-  const domain = normalizedEmail.slice(atIndex + 1)
-  const parts = domain.split('.').filter(Boolean)
-  if (parts.length === 0) return ''
-  return parts[0] ?? ''
 }
 
-function getApiErrorDetail(data: unknown): string | null {
-  if (!data) return null
-  if (typeof data === 'string') return data
-  if (typeof data !== 'object') return null
+function getSlugCandidates(email: string): string[] {
+  const storedSlug = localStorage.getItem('slug')?.trim().toLowerCase() ?? ''
+  const emailSlug = inferTenantSlugFromEmail(email).trim().toLowerCase()
 
-  const detail = (data as { detail?: unknown }).detail
-  if (typeof detail === 'string') return detail
-  return null
+  return Array.from(new Set([storedSlug, emailSlug].filter(Boolean)))
 }
 
 function EyeIcon({ open }: { open: boolean }) {
@@ -71,6 +72,24 @@ function EyeIcon({ open }: { open: boolean }) {
   )
 }
 
+function FlowerIcon() {
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden="true" className="login-page__logo-fallback">
+      <g fill="#D4477A">
+        <ellipse cx="24" cy="10" rx="4.4" ry="7" />
+        <ellipse cx="24" cy="38" rx="4.4" ry="7" />
+        <ellipse cx="10" cy="24" rx="7" ry="4.4" />
+        <ellipse cx="38" cy="24" rx="7" ry="4.4" />
+        <ellipse cx="14.2" cy="14.2" rx="4.2" ry="6.5" transform="rotate(-45 14.2 14.2)" />
+        <ellipse cx="33.8" cy="33.8" rx="4.2" ry="6.5" transform="rotate(-45 33.8 33.8)" />
+        <ellipse cx="33.8" cy="14.2" rx="4.2" ry="6.5" transform="rotate(45 33.8 14.2)" />
+        <ellipse cx="14.2" cy="33.8" rx="4.2" ry="6.5" transform="rotate(45 14.2 33.8)" />
+      </g>
+      <circle cx="24" cy="24" r="4.8" fill="#F7A7C3" />
+    </svg>
+  )
+}
+
 export default function LoginPage({ onAuthenticated }: LoginPageProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -78,14 +97,23 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
   const [errors, setErrors] = useState<FieldErrors>({})
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  const [logoIndex, setLogoIndex] = useState(0)
 
-  const hasEmailError = useMemo(() => Boolean(errors.email), [errors.email])
-  const hasPasswordError = useMemo(() => Boolean(errors.password), [errors.password])
+  const hasEmailError = Boolean(errors.email)
+  const hasPasswordError = Boolean(errors.password)
+  const logoSrc = PETALOPS_LOGO_CANDIDATES[logoIndex]
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSuccess(false)
     setErrors({})
+    setSubmitError('')
+
+    if (!hasApiBaseUrl()) {
+      setSubmitError('La URL de la API no esta configurada. Define VITE_API_URL para iniciar sesion.')
+      return
+    }
 
     const nextErrors: FieldErrors = {}
 
@@ -97,8 +125,8 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
       nextErrors.password = 'Correo o contrasena incorrectos'
     }
 
-    const slug = inferTenantSlugFromEmail(email)
-    if (!slug) {
+    const slugCandidates = getSlugCandidates(email)
+    if (slugCandidates.length === 0) {
       nextErrors.email = 'Ingresa un correo valido'
     }
 
@@ -110,32 +138,66 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
     setLoading(true)
 
     try {
-      const response = await apiClient.post<LoginResponse>('/auth/login', {
-        email: email.trim(),
-        password,
-        slug,
-      })
+      let lastStatus = 0
+      let lastDetail = ''
+      let token: string | undefined
+      let resolvedSlug = slugCandidates[0] ?? ''
 
-      const token = response.data.access_token
+      for (const slug of slugCandidates) {
+        const response = await fetch(buildApiUrl('/auth/login'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email.trim(),
+            password,
+            slug,
+          }),
+        })
+
+        const data = (await response.json().catch(() => ({}))) as LoginResponse
+        lastStatus = response.status
+        lastDetail = data.detail || ''
+
+        if (response.ok && data.access_token) {
+          token = data.access_token
+          resolvedSlug = slug
+          break
+        }
+
+        if (response.status === 404) {
+          lastDetail = 'La ruta de autenticacion no esta disponible en el backend configurado.'
+          continue
+        }
+
+        if (response.status !== 401 && response.status >= 400) {
+          lastDetail = data.detail || 'No pudimos conectar con el backend. Intenta de nuevo.'
+        }
+      }
 
       if (!token) {
-        setErrors({ password: 'Correo o contrasena incorrectos' })
+        if (lastStatus === 401) {
+          setErrors({
+            password: 'Credenciales o slug invalidos. Verifica el correo, la contrasena y la tienda.',
+          })
+        } else if (lastStatus === 404) {
+          setSubmitError(
+            'No encontramos la ruta de autenticacion en el backend configurado. Revisa VITE_API_URL.',
+          )
+        } else {
+          setSubmitError(lastDetail || 'No pudimos conectar. Intenta de nuevo.')
+        }
         setSuccess(false)
         return
       }
 
+      localStorage.setItem('slug', resolvedSlug)
       setSuccess(true)
       setErrors({})
       window.setTimeout(() => {
         onAuthenticated?.(token)
       }, 250)
-    } catch (error) {
-      if (error instanceof AxiosError) {
-        const detail = getApiErrorDetail(error.response?.data)
-        setErrors({ password: detail || 'Correo o contrasena incorrectos' })
-      } else {
-        setErrors({ password: 'No se pudo iniciar sesion. Intenta nuevamente.' })
-      }
+    } catch {
+      setSubmitError('No pudimos conectar. Intenta de nuevo.')
       setSuccess(false)
     } finally {
       setLoading(false)
@@ -147,13 +209,24 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
       <section className="login-page__card">
         <header className="login-page__header">
           <div className="login-page__flower-box">
-            <img
-              src="https://ddy2osi8uorg4.cloudfront.net/tenants/petalops/logos/PetalOps+Logo.png"
-              alt="Petalops"
-              className="login-page__logo-img"
-              loading="eager"
-              decoding="async"
-            />
+            {logoSrc ? (
+              <img
+                src={logoSrc}
+                alt="Petalops"
+                className="login-page__logo-img"
+                loading="eager"
+                decoding="async"
+                referrerPolicy="no-referrer"
+                onError={() => {
+                  setLogoIndex((current) => {
+                    const next = current + 1
+                    return next < PETALOPS_LOGO_CANDIDATES.length ? next : PETALOPS_LOGO_CANDIDATES.length
+                  })
+                }}
+              />
+            ) : (
+              <FlowerIcon />
+            )}
           </div>
 
           <p className="login-page__brand">Petalops</p>
@@ -212,10 +285,7 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
                 <EyeIcon open={showPassword} />
               </button>
             </div>
-            <p
-              id="login-password-error"
-              className={`login-page__error ${hasPasswordError ? 'is-visible' : ''}`}
-            >
+            <p id="login-password-error" className={`login-page__error ${hasPasswordError ? 'is-visible' : ''}`}>
               {errors.password || 'Correo o contrasena incorrectos'}
             </p>
           </div>
@@ -230,6 +300,12 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
               'Ingresar'
             )}
           </button>
+
+          {submitError ? (
+            <p className="login-page__error is-visible" role="alert">
+              {submitError}
+            </p>
+          ) : null}
 
           <div className={`login-page__success ${success ? 'is-visible' : ''}`} role="status" aria-live="polite">
             Acceso correcto - redirigiendo...

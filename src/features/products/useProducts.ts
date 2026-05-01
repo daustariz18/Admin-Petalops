@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiClient } from '../../services/apiClient'
+import { buildApiUrl } from '../../services/apiUrl'
+import { buildProductsEndpoint } from '../../services/productPaths'
 
 export type ProductStatus = 'activo' | 'inactivo'
 
 export type ProductItem = {
   id: string
+  backend_id?: number
+  codigo_producto?: string
+  image_s3_key?: string
   image_url: string
   nombre: string
   precio: number
@@ -18,16 +23,23 @@ type UseProductsReturn = {
   products: ProductItem[]
   isLoading: boolean
   createProduct: (input: Omit<ProductItem, 'id'>) => ProductItem
+  reloadProducts: () => Promise<ProductItem[]>
   updateProduct: (id: string, patch: Partial<Omit<ProductItem, 'id'>>) => Promise<boolean>
   toggleProductStatus: (id: string) => Promise<boolean>
-  removeProduct: (id: string) => void
-  replaceProductImage: (id: string, file: File) => void
+  removeProduct: (id: string) => Promise<'deleted' | 'backend_locked' | 'not_found' | 'error'>
+  replaceProductImage: (
+    id: string,
+    input: { file?: File; s3Key?: string },
+  ) => Promise<{ image_url: string; image_s3_key?: string }>
 }
 
 type AnyRecord = Record<string, unknown>
-const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.trim() ?? ''
-const PRODUCTS_BASE_PATH =
-  (import.meta.env.VITE_PRODUCTS_BASE_PATH as string | undefined)?.trim() || '/admin/productos'
+type ProductCacheEntry = {
+  items: ProductItem[]
+  loadedAt: number
+}
+
+const productsCache = new Map<string, ProductCacheEntry>()
 
 function navigateTo(path: string): void {
   if (window.location.pathname !== path) {
@@ -53,9 +65,11 @@ function normalizeAbsoluteUrl(rawUrl: string): string {
   const url = rawUrl.trim()
   if (!url) return ''
   if (/^(https?:|blob:|data:)/i.test(url)) return url
-  const base = API_BASE.replace(/\/$/, '')
-  if (!base) return url
-  return `${base}${url.startsWith('/') ? '' : '/'}${url}`
+  try {
+    return buildApiUrl(url)
+  } catch {
+    return url
+  }
 }
 
 function getImageFromNested(item: AnyRecord): string {
@@ -122,6 +136,9 @@ function getImageByHeuristic(source: unknown, depth = 0): string {
     const record = source as AnyRecord
     for (const [key, value] of Object.entries(record)) {
       const lower = key.toLowerCase()
+      if (lower.includes('logo')) {
+        continue
+      }
       if (
         lower.includes('image') ||
         lower.includes('imagen') ||
@@ -151,6 +168,61 @@ function normalizeEstado(value: unknown): ProductStatus {
   return 'inactivo'
 }
 
+function extractErrorMessage(error: unknown, fallback: string): string {
+  const responseData = (error as { response?: { data?: unknown } })?.response?.data
+  if (typeof responseData === 'string' && responseData.trim()) {
+    return responseData.trim()
+  }
+
+  if (responseData && typeof responseData === 'object') {
+    const record = responseData as AnyRecord
+    const candidate =
+      toStringOrEmpty(record.detail) ||
+      toStringOrEmpty(record.message) ||
+      toStringOrEmpty(record.error) ||
+      toStringOrEmpty(record.mensaje)
+    if (candidate) return candidate
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+
+  return fallback
+}
+
+function normalizeProductImageResponse(payload: unknown): {
+  image_url: string
+  image_s3_key?: string
+} | null {
+  if (!payload || typeof payload !== 'object') return null
+
+  const record = payload as AnyRecord
+  const nested =
+    record.data && typeof record.data === 'object' ? (record.data as AnyRecord) : null
+  const merged = nested ? { ...record, ...nested } : record
+
+  const imageUrl =
+    toStringOrEmpty(merged.imagenUrl) ||
+    toStringOrEmpty(merged.imageUrl) ||
+    toStringOrEmpty(merged.imagen_url) ||
+    toStringOrEmpty(merged.image_url)
+
+  const imageS3Key =
+    toStringOrEmpty(merged.imagenS3Key) ||
+    toStringOrEmpty(merged.imageS3Key) ||
+    toStringOrEmpty(merged.imagen_s3_key) ||
+    toStringOrEmpty(merged.image_s3_key) ||
+    toStringOrEmpty(merged.s3Key)
+
+  if (!imageUrl && !imageS3Key) return null
+
+  return {
+    image_url: normalizeAbsoluteUrl(imageUrl),
+    image_s3_key: imageS3Key || undefined,
+  }
+}
+
 function normalizeProduct(raw: unknown): ProductItem | null {
   if (!raw || typeof raw !== 'object') return null
   const item = raw as AnyRecord
@@ -158,6 +230,7 @@ function normalizeProduct(raw: unknown): ProductItem | null {
   const idRaw = item.id ?? item.productoID ?? item.productId ?? item.productID
   const id = toStringOrEmpty(idRaw) || String(toNumber(idRaw))
   if (!id || id === '0') return null
+  const backendID = toNumber(item.id ?? item.productoID ?? item.productId ?? item.productID)
 
   const nombre =
     toStringOrEmpty(item.nombre) ||
@@ -189,6 +262,9 @@ function normalizeProduct(raw: unknown): ProductItem | null {
 
   return {
     id,
+    backend_id: Number.isFinite(backendID) && backendID > 0 ? backendID : undefined,
+    codigo_producto: toStringOrEmpty(item.codigo_producto ?? item.codigoProducto ?? item.codigo),
+    image_s3_key: toStringOrEmpty(item.imagen_s3_key ?? item.imagenS3Key ?? item.image_s3_key ?? item.imageS3Key),
     image_url: imageUrl,
     nombre,
     precio,
@@ -229,106 +305,101 @@ function extractArrayPayload(payload: unknown): unknown[] {
 
 function buildStatusEndpoints(productId: string, empresaID: string): string[] {
   const query = `empresa_id=${encodeURIComponent(empresaID)}`
-  const pid = encodeURIComponent(productId)
-  const base = PRODUCTS_BASE_PATH.replace(/\/$/, '')
-  const endpoint = `${base}/${pid}/estado?${query}`
+  const endpoint = `${buildProductsEndpoint(productId, 'estado')}?${query}`
   return [endpoint]
 }
 
 function buildUpdateEndpoints(productId: string, empresaID: string): string[] {
   const query = `empresa_id=${encodeURIComponent(empresaID)}`
-  const pid = encodeURIComponent(productId)
-  const base = PRODUCTS_BASE_PATH.replace(/\/$/, '')
-  return [`${base}/${pid}?${query}`, `${base}/${pid}`]
+  return [`${buildProductsEndpoint(productId)}?${query}`, buildProductsEndpoint(productId)]
 }
 
 export function useProducts(empresaID: string): UseProductsReturn {
-  const storageKey = useMemo(() => `petalops.products.${empresaID || 'default'}`, [empresaID])
   const revokedRef = useRef<Set<string>>(new Set())
 
-  const [products, setProducts] = useState<ProductItem[]>([])
+  const [productosBackend, setProductosBackend] = useState<ProductItem[]>([])
+  const [productosLocal, setProductosLocal] = useState<ProductItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(storageKey)
-      if (!raw) return
-      const parsed = JSON.parse(raw) as unknown
-      if (Array.isArray(parsed)) {
-        setProducts(parsed as ProductItem[])
+  const productos = useMemo(
+    () => [...productosBackend, ...productosLocal],
+    [productosBackend, productosLocal],
+  )
+
+  const revokeBlobUrls = useCallback((items: ProductItem[]) => {
+    items.forEach((product) => {
+      if (isBlobUrl(product.image_url) && !revokedRef.current.has(product.image_url)) {
+        URL.revokeObjectURL(product.image_url)
+        revokedRef.current.add(product.image_url)
       }
-    } catch {
-      setProducts([])
-    }
-  }, [storageKey])
+    })
+  }, [])
 
-  useEffect(() => {
-    window.localStorage.setItem(storageKey, JSON.stringify(products))
-  }, [products, storageKey])
+  const clearLocalProducts = useCallback(() => {
+    setProductosLocal((current) => {
+      revokeBlobUrls(current)
+      return []
+    })
+  }, [revokeBlobUrls])
 
-  useEffect(() => {
-    console.log('Productos cargados:', products)
-  }, [products])
+  const loadProducts = useCallback(
+    async (force = false): Promise<ProductItem[]> => {
+      const normalizedEmpresaID = empresaID.trim()
 
-  useEffect(() => {
-    let active = true
-
-    const loadProducts = async () => {
-      if (!empresaID?.trim()) {
+      if (!normalizedEmpresaID) {
         setIsLoading(false)
-        return
+        setProductosBackend([])
+        clearLocalProducts()
+        return []
+      }
+
+      const cacheKey = normalizedEmpresaID
+      if (!force) {
+        const cached = productsCache.get(cacheKey)
+        if (cached) {
+          setProductosBackend(cached.items)
+          clearLocalProducts()
+          setIsLoading(false)
+          return cached.items
+        }
       }
 
       try {
         setIsLoading(true)
-        const endpoint = `${PRODUCTS_BASE_PATH.replace(/\/$/, '')}?empresa_id=${encodeURIComponent(empresaID)}`
+        const endpoint = `${buildProductsEndpoint()}?empresa_id=${encodeURIComponent(normalizedEmpresaID)}`
         const res = await apiClient.get(endpoint)
-
-        console.log('Respuesta backend productos:', res.data)
 
         const payloadArray = extractArrayPayload(res.data)
         const normalized = payloadArray
           .map((item) => normalizeProduct(item))
           .filter((item): item is ProductItem => item !== null)
 
-        console.log('Productos normalizados:', normalized)
-        console.log(
-          'Debug imagenes productos:',
-          payloadArray.map((item) => ({
-            raw: item,
-            parsedImage: normalizeProduct(item)?.image_url ?? '',
-          })),
-        )
+        productsCache.set(cacheKey, {
+          items: normalized,
+          loadedAt: Date.now(),
+        })
 
-        if (active) {
-          setProducts(normalized)
-        }
+        setProductosBackend(normalized)
+        clearLocalProducts()
+        return normalized
       } catch (error) {
-        console.log('Error al cargar productos:', error)
+        return []
       } finally {
-        if (active) {
-          setIsLoading(false)
-        }
+        setIsLoading(false)
       }
-    }
+    },
+    [empresaID, clearLocalProducts],
+  )
 
-    void loadProducts()
-
-    return () => {
-      active = false
-    }
-  }, [empresaID])
+  const reloadProducts = useCallback(async (): Promise<ProductItem[]> => loadProducts(true), [loadProducts])
 
   useEffect(() => {
-    return () => {
-      products.forEach((product) => {
-        if (isBlobUrl(product.image_url) && !revokedRef.current.has(product.image_url)) {
-          URL.revokeObjectURL(product.image_url)
-          revokedRef.current.add(product.image_url)
-        }
-      })
-    }
-  }, [products])
+    void loadProducts(false)
+  }, [loadProducts])
+
+  useEffect(() => {
+    return () => revokeBlobUrls(productos)
+  }, [productos, revokeBlobUrls])
 
   const createProduct = useCallback((input: Omit<ProductItem, 'id'>) => {
     const created: ProductItem = {
@@ -336,20 +407,31 @@ export function useProducts(empresaID: string): UseProductsReturn {
       id: crypto.randomUUID(),
     }
 
-    setProducts((prev) => [created, ...prev])
+    setProductosLocal((prev) => [created, ...prev])
     navigateTo('/products')
     return created
   }, [])
 
   const updateProduct = useCallback(
     async (id: string, patch: Partial<Omit<ProductItem, 'id'>>): Promise<boolean> => {
-      const current = products.find((product) => product.id === id)
-      if (!current) return false
+      const localIndex = productosLocal.findIndex((product) => product.id === id)
+      if (localIndex >= 0) {
+        setProductosLocal((prev) =>
+          prev.map((product) => (product.id === id ? { ...product, ...patch } : product)),
+        )
+        return true
+      }
 
-      setProducts((prev) => prev.map((product) => (product.id === id ? { ...product, ...patch } : product)))
+      const backendProduct = productosBackend.find((product) => product.id === id)
+      if (!backendProduct) return false
 
       const payload: Record<string, unknown> = {}
       if (typeof patch.nombre === 'string') payload.nombre = patch.nombre
+      if (typeof patch.codigo_producto === 'string') {
+        payload.codigo_producto = patch.codigo_producto
+        payload.codigoProducto = patch.codigo_producto
+        payload.codigo = patch.codigo_producto
+      }
       if (typeof patch.precio === 'number') payload.precio = patch.precio
       if (typeof patch.categoria === 'string') payload.categoria = patch.categoria
       if (typeof patch.categoriaID === 'number') {
@@ -369,14 +451,12 @@ export function useProducts(empresaID: string): UseProductsReturn {
         for (const endpoint of endpoints) {
           for (const method of methods) {
             try {
-              if (import.meta.env.DEV) {
-                console.log('[update-product] intentando', { method, endpoint, payload })
-              }
               await apiClient.request({
                 url: endpoint,
                 method,
                 data: payload,
               })
+              await loadProducts(true)
               return true
             } catch (error: unknown) {
               const status = (error as { response?: { status?: number } })?.response?.status
@@ -390,19 +470,24 @@ export function useProducts(empresaID: string): UseProductsReturn {
 
         throw new Error('No se pudo persistir la edicion del producto en backend.')
       } catch (error) {
-        setProducts((prev) =>
-          prev.map((product) => (product.id === id ? { ...product, ...current } : product)),
-        )
-        console.log('Error al actualizar producto:', error)
         return false
       }
     },
-    [empresaID, products],
+    [empresaID, loadProducts, productosBackend, productosLocal],
   )
 
   const toggleProductStatus = useCallback(
     async (id: string): Promise<boolean> => {
-      const current = products.find((product) => product.id === id)
+      const localProduct = productosLocal.find((product) => product.id === id)
+      if (localProduct) {
+        const nextEstado: ProductStatus = localProduct.estado === 'activo' ? 'inactivo' : 'activo'
+        setProductosLocal((prev) =>
+          prev.map((product) => (product.id === id ? { ...product, estado: nextEstado } : product)),
+        )
+        return true
+      }
+
+      const current = productosBackend.find((product) => product.id === id)
       if (!current) return false
 
       const nextEstado: ProductStatus = current.estado === 'activo' ? 'inactivo' : 'activo'
@@ -410,24 +495,17 @@ export function useProducts(empresaID: string): UseProductsReturn {
       const payloads = [{ estado: nextEstado }]
       const methods: Array<'patch'> = ['patch']
 
-      // Optimistic update: rollback if backend rejects.
-      setProducts((prev) =>
-        prev.map((product) => (product.id === id ? { ...product, estado: nextEstado } : product)),
-      )
-
       try {
         for (const endpoint of endpoints) {
           for (const method of methods) {
             for (const payload of payloads) {
               try {
-                if (import.meta.env.DEV) {
-                  console.log('[toggle-status] intentando', { method, endpoint, payload })
-                }
                 await apiClient.request({
                   url: endpoint,
                   method,
                   data: payload,
                 })
+                await loadProducts(true)
                 return true
               } catch (error: unknown) {
                 const status = (error as { response?: { status?: number } })?.response?.status
@@ -441,52 +519,129 @@ export function useProducts(empresaID: string): UseProductsReturn {
         }
         throw new Error('No se pudo actualizar estado con PATCH /admin/productos/:id/estado.')
       } catch (error) {
-        setProducts((prev) =>
-          prev.map((product) => (product.id === id ? { ...product, estado: current.estado } : product)),
-        )
-        console.log('Error al actualizar estado del producto:', error)
         return false
       }
     },
-    [empresaID, products],
+    [empresaID, loadProducts, productosBackend, productosLocal],
   )
 
-  const removeProduct = useCallback((id: string) => {
-    setProducts((prev) => {
-      const target = prev.find((product) => product.id === id)
-      if (target && isBlobUrl(target.image_url) && !revokedRef.current.has(target.image_url)) {
-        URL.revokeObjectURL(target.image_url)
-        revokedRef.current.add(target.image_url)
+  const removeProduct = useCallback(
+    async (id: string): Promise<'deleted' | 'backend_locked' | 'not_found' | 'error'> => {
+      const localProduct = productosLocal.find((product) => product.id === id)
+      if (localProduct) {
+        setProductosLocal((prev) => {
+          const target = prev.find((product) => product.id === id)
+          if (target && isBlobUrl(target.image_url) && !revokedRef.current.has(target.image_url)) {
+            URL.revokeObjectURL(target.image_url)
+            revokedRef.current.add(target.image_url)
+          }
+          return prev.filter((product) => product.id !== id)
+        })
+        return 'deleted'
       }
 
-      return prev.filter((product) => product.id !== id)
-    })
-  }, [])
+      const backendProduct = productosBackend.find((product) => product.id === id)
+      if (backendProduct) return 'backend_locked'
 
-  const replaceProductImage = useCallback((id: string, file: File) => {
-    const nextImageUrl = URL.createObjectURL(file)
+      return 'not_found'
+    },
+    [productosBackend, productosLocal],
+  )
 
-    setProducts((prev) =>
-      prev.map((product) => {
-        if (product.id !== id) return product
+  const replaceProductImage = useCallback(
+    async (
+      id: string,
+      input: { file?: File; s3Key?: string },
+    ): Promise<{ image_url: string; image_s3_key?: string }> => {
+      const localIndex = productosLocal.findIndex((product) => product.id === id)
+      const localProduct = localIndex >= 0 ? productosLocal[localIndex] : null
+      const backendProduct = productosBackend.find((product) => product.id === id)
 
-        if (isBlobUrl(product.image_url) && !revokedRef.current.has(product.image_url)) {
-          URL.revokeObjectURL(product.image_url)
-          revokedRef.current.add(product.image_url)
+      if (!input.file && !input.s3Key?.trim()) {
+        throw new Error('Debes enviar un archivo o un s3Key para reemplazar la imagen.')
+      }
+
+      if (localProduct && !backendProduct?.backend_id) {
+        if (!input.file) {
+          throw new Error('Para productos locales, el reemplazo de imagen requiere un archivo.')
         }
+
+        const nextImageUrl = URL.createObjectURL(input.file)
+        setProductosLocal((prev) =>
+          prev.map((product) => {
+            if (product.id !== id) return product
+
+            if (isBlobUrl(product.image_url) && !revokedRef.current.has(product.image_url)) {
+              URL.revokeObjectURL(product.image_url)
+              revokedRef.current.add(product.image_url)
+            }
+
+            return {
+              ...product,
+              image_url: nextImageUrl,
+            }
+          }),
+        )
 
         return {
-          ...product,
           image_url: nextImageUrl,
+          image_s3_key: localProduct.image_s3_key,
         }
-      }),
-    )
-  }, [])
+      }
+
+      const productoID = backendProduct?.backend_id
+      if (!productoID) {
+        throw new Error('No se encontró un producto backend válido para reemplazar la imagen.')
+      }
+
+      const endpoint = buildProductsEndpoint(String(productoID), 'imagen')
+
+      try {
+        const response = input.file
+          ? await apiClient.patch(
+              endpoint,
+              (() => {
+                const formData = new FormData()
+                formData.append('file', input.file as Blob)
+                formData.append('empresa_id', String(empresaID))
+                return formData
+              })(),
+            )
+          : await apiClient.patch(endpoint, {
+              empresa_id: empresaID,
+              s3Key: input.s3Key?.trim(),
+            })
+
+        const normalized = normalizeProductImageResponse(response.data)
+        if (!normalized) {
+          throw new Error('El backend no devolvió una respuesta válida para la imagen.')
+        }
+
+        setProductosBackend((prev) =>
+          prev.map((product) =>
+            product.id === id
+              ? {
+                  ...product,
+                  image_url: normalized.image_url,
+                  image_s3_key: normalized.image_s3_key,
+                }
+              : product,
+          ),
+        )
+
+        return normalized
+      } catch (error) {
+        throw new Error(extractErrorMessage(error, 'No se pudo reemplazar la imagen del producto.'))
+      }
+    },
+    [empresaID, productosBackend, productosLocal],
+  )
 
   return {
-    products,
+    products: productos,
     isLoading,
     createProduct,
+    reloadProducts,
     updateProduct,
     toggleProductStatus,
     removeProduct,

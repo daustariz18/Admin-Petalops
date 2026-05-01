@@ -412,6 +412,110 @@ h1 {
   padding: 0.75rem;
 }
 
+.pcf-dialog {
+  width: min(92vw, 460px);
+  border: 0;
+  padding: 0;
+  border-radius: 28px;
+  background: transparent;
+  box-shadow: 0 28px 80px rgba(58, 31, 43, 0.24);
+}
+
+.pcf-dialog::backdrop {
+  background:
+    radial-gradient(circle at 20% 20%, rgba(212, 71, 122, 0.16), transparent 34%),
+    rgba(24, 14, 18, 0.44);
+  backdrop-filter: blur(6px);
+}
+
+.pcf-dialog__panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1.4rem 1.4rem 1.25rem;
+  border-radius: 28px;
+  border: 1px solid rgba(231, 213, 222, 0.95);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(255, 248, 251, 0.94)),
+    radial-gradient(circle at top right, rgba(212, 71, 122, 0.1), transparent 28%);
+}
+
+.pcf-dialog__header {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.pcf-dialog__eyebrow {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 800;
+  color: #d4477a;
+}
+
+.pcf-dialog__title-group {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.pcf-dialog__title-group h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  line-height: 1.15;
+  font-weight: 700;
+  color: #111827;
+}
+
+.pcf-dialog__subtitle {
+  margin: 0;
+  color: #6b7280;
+  line-height: 1.45;
+  font-size: 0.92rem;
+}
+
+.pcf-dialog__field {
+  gap: 0.38rem;
+}
+
+.pcf-dialog__field span {
+  color: #6a5660;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+}
+
+.pcf-dialog__field input {
+  min-height: 50px;
+  border-radius: 14px;
+  border: 1px solid rgba(212, 71, 122, 0.16);
+  background: #fff;
+  padding: 0.82rem 0.95rem;
+  font-size: 0.98rem;
+  box-shadow: 0 1px 0 rgba(17, 24, 39, 0.02) inset;
+}
+
+.pcf-dialog__field input::placeholder {
+  color: #a08b96;
+}
+
+.pcf-dialog__field input:focus {
+  border-color: #d4477a;
+  box-shadow: 0 0 0 4px rgba(212, 71, 122, 0.14);
+}
+
+.pcf-dialog__error {
+  padding: 0.8rem 0.9rem;
+  border-radius: 14px;
+  background: #fff4f4;
+  border: 1px solid #f5c3c3;
+}
+
+.pcf-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-top: 0.15rem;
+}
+
 .npf-success-note {
   margin: 0;
   border-radius: 8px;
@@ -420,6 +524,7 @@ h1 {
   padding: 0.7rem 0.9rem;
   color: #8a455e;
   font-weight: 700;
+  white-space: pre-line;
 }
 
 .npf-board {
@@ -734,6 +839,24 @@ h1 {
   .npf-sticky-actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .pcf-dialog {
+    width: min(94vw, 420px);
+    border-radius: 24px;
+  }
+
+  .pcf-dialog__panel {
+    padding: 1.15rem 1.05rem 1rem;
+    border-radius: 24px;
+  }
+
+  .pcf-dialog__actions {
+    flex-direction: column-reverse;
+  }
+
+  .pcf-dialog__actions .pcf-btn {
+    width: 100%;
   }
 }
 

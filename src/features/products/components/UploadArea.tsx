@@ -9,6 +9,7 @@ type UploadAreaProps = {
 
 export function UploadArea({ disabled, slotsLeft, maxPhotos, onUpload }: UploadAreaProps) {
   const [isDragging, setIsDragging] = useState(false)
+  const uploadedCount = maxPhotos - slotsLeft
 
   const onDrop = (event: DragEvent<HTMLLabelElement>) => {
     event.preventDefault()
@@ -23,7 +24,7 @@ export function UploadArea({ disabled, slotsLeft, maxPhotos, onUpload }: UploadA
 
   return (
     <label
-      className={`pc-upload-area ${isDragging ? 'is-dragging' : ''} ${disabled ? 'is-disabled' : ''}`}
+      className={`pc-dropzone ${isDragging ? 'is-dragging' : ''} ${disabled ? 'is-disabled' : ''}`}
       onDrop={onDrop}
       onDragOver={(event) => event.preventDefault()}
       onDragEnter={() => setIsDragging(true)}
@@ -36,14 +37,25 @@ export function UploadArea({ disabled, slotsLeft, maxPhotos, onUpload }: UploadA
         disabled={disabled || slotsLeft <= 0}
         onChange={onChange}
         aria-label="Subir fotos de productos"
+        className="pc-dropzone__input"
       />
-      <p>Arrastra tus fotos o haz clic para subir</p>
-      <small>
-        {slotsLeft > 0
-          ? `Límite ${maxPhotos} fotos · disponibles ${slotsLeft}`
-          : `Límite de ${maxPhotos} fotos alcanzado`}
-      </small>
+
+      <div className="pc-dropzone__icon">
+        <span />
+        <span />
+      </div>
+
+      <div className="pc-dropzone__copy">
+        <p>Arrastra tus imagenes o haz clic para subir</p>
+        <small>Sube fotos claras para crear tarjetas de producto mas limpias.</small>
+      </div>
+
+      <div className="pc-dropzone__actions">
+        <span className="pc-dropzone__counter">
+          {uploadedCount} / {maxPhotos} imagenes
+        </span>
+        <span className="pc-dropzone__button">Seleccionar archivos</span>
+      </div>
     </label>
   )
 }
-

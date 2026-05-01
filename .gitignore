@@ -5,5 +5,13 @@ dist
 !.env.example
 *.tsbuildinfo
 *.log
+*.out.log
+*.err.log
+vite-*.log
+dist-*.log
+cpanel-*.log
+__pycache__/
+*.pyc
+*.pyo
 .vscode/*
 !.vscode/extensions.json

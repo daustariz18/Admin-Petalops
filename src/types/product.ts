@@ -1,11 +1,10 @@
 // ── Request types ────────────────────────────────────────────────────────────
 
 export interface CreateProductRequest {
-  nombre: string
-  precio: number
-  categoriaID: number
-  mimeType: string
-  descripcion?: string
+  name: string
+  price: number
+  category_id: number
+  description?: string
 }
 
 export interface ConfirmProductImageRequest {
@@ -16,7 +15,8 @@ export interface ConfirmProductImageRequest {
 
 /** Respuesta de POST /admin/productos */
 export interface CreateProductResponse {
-  productoID: number
+  id: number
+  codigo_producto: string
   uploadUrl: string
   s3Key: string
   expiresIn: number
@@ -42,7 +42,8 @@ export type CreateProductStep =
 
 /** Resultado final expuesto al componente tras un flujo exitoso. */
 export interface CreateProductResult {
-  productoID: number
+  id: number
+  codigo_producto: string
   imagenUrl: string
   imagenS3Key: string
 }

@@ -46,6 +46,12 @@
   filter: saturate(1.05) contrast(1.08);
 }
 
+.login-page__logo-fallback {
+  width: 54px;
+  height: 54px;
+  display: block;
+}
+
 .login-page__brand {
   margin: 1.15rem 0 0;
   font-size: 14px;

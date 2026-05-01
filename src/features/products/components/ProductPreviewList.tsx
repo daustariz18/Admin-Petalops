@@ -28,9 +28,15 @@ export function ProductPreviewList({
 }: ProductPreviewListProps) {
   if (drafts.length === 0) {
     return (
-      <p className="pc-empty-state" role="status">
-        Sube una o varias fotos para ver la vista previa de tus productos.
-      </p>
+      <div className="pc-empty-state" role="status">
+        <div className="pc-empty-state__art">
+          <span />
+          <span />
+          <span />
+        </div>
+        <h3>Sube imagenes para comenzar</h3>
+        <p>Veras una vista previa inmediata para editar nombre, precio y categoria antes de guardar.</p>
+      </div>
     )
   }
 
@@ -52,4 +58,3 @@ export function ProductPreviewList({
     </section>
   )
 }
-

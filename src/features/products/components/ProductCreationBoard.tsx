@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { NewCategoryDialog } from '../../../components/NewCategoryDialog'
-import { useCategorias } from '../../../hooks/useCategorias'
-import { createProductWithImage } from '../../../services/productService'
+import { createProductWithImage, validateImageFile } from '../../../services/productService'
 import type { DraftSaveMeta } from '../types'
-import { isDraftComplete, parsePrice } from '../types'
+import { getDraftCategoryLabel, isDraftComplete, parsePrice } from '../types'
 import { useProductDrafts } from '../hooks/useProductDrafts'
 import type { ProductItem } from '../useProducts'
+import type { Categoria } from '../../../hooks/useCategorias'
 import { ProductActionsFooter } from './ProductActionsFooter'
 import { ProductPreviewList } from './ProductPreviewList'
 import { UploadArea } from './UploadArea'
@@ -13,14 +13,30 @@ import './product-creation.css'
 
 const MAX_PRODUCTS = 60
 
-type ProductCreationBoardProps = {
-  empresaID?: string
-  onCreatedBatch?: (products: Array<Omit<ProductItem, 'id'>>) => void
+type CreatedProduct = Omit<ProductItem, 'id'> & {
+  backend_id?: number
+  codigo_producto?: string
 }
 
-export const ProductCreationBoard = ({ empresaID, onCreatedBatch }: ProductCreationBoardProps) => {
-  const { categorias, categoriasLoading, categoriasError, creatingCategoria, createCategoria } =
-    useCategorias(empresaID)
+type ProductCreationBoardProps = {
+  empresaID?: string
+  categorias: Categoria[]
+  categoriasLoading: boolean
+  categoriasError: string
+  creatingCategoria: boolean
+  createCategoria: (nombre: string) => Promise<Categoria>
+  onCreatedBatch?: (products: CreatedProduct[]) => void
+}
+
+export const ProductCreationBoard = ({
+  empresaID,
+  categorias,
+  categoriasLoading,
+  categoriasError,
+  creatingCategoria,
+  createCategoria,
+  onCreatedBatch,
+}: ProductCreationBoardProps) => {
   const { drafts, slotsLeft, handleImageUpload, updateDraft, removeDraft, removeDrafts } =
     useProductDrafts(MAX_PRODUCTS)
 
@@ -44,10 +60,26 @@ export const ProductCreationBoard = ({ empresaID, onCreatedBatch }: ProductCreat
     })
   }, [categorias, drafts, updateDraft])
 
-  const completeDrafts = useMemo(() => drafts.filter((draft) => isDraftComplete(draft)), [drafts])
+  const isPersonalizadosDraft = (draft: (typeof drafts)[number]) => {
+    return getDraftCategoryLabel(draft.categoria, categorias).trim().toLowerCase() === 'personalizado'
+  }
+
+  const completeDrafts = useMemo(
+    () =>
+      drafts.filter((draft) =>
+        isDraftComplete(draft, {
+          allowZeroPrice: isPersonalizadosDraft(draft),
+        }),
+      ),
+    [drafts, categorias],
+  )
 
   const canSave =
-    !isSaving && drafts.length > 0 && completeDrafts.length > 0 && Boolean(empresaID?.trim()) && categorias.length > 0
+    !isSaving &&
+    drafts.length > 0 &&
+    completeDrafts.length > 0 &&
+    Boolean(empresaID?.trim()) &&
+    categorias.length > 0
 
   const openNewCategoryDialog = (draftId?: string) => {
     setCategoryTargetDraftId(draftId ?? null)
@@ -123,7 +155,8 @@ export const ProductCreationBoard = ({ empresaID, onCreatedBatch }: ProductCreat
 
     let okCount = 0
     const savedIds: string[] = []
-    const createdProducts: Array<Omit<ProductItem, 'id'>> = []
+    const createdProducts: CreatedProduct[] = []
+    const createdCodes: string[] = []
 
     for (let index = 0; index < completeDrafts.length; index += 1) {
       const draft = completeDrafts[index]
@@ -131,14 +164,18 @@ export const ProductCreationBoard = ({ empresaID, onCreatedBatch }: ProductCreat
       setSaveMetaById((prev) => ({ ...prev, [draft.id]: { state: 'saving' } }))
 
       try {
+        const fileValidationError = validateImageFile(draft.file)
+        if (fileValidationError) {
+          throw new Error(fileValidationError)
+        }
+
         const result = await createProductWithImage(
           empresaID.trim(),
           {
-            nombre: draft.nombre.trim(),
-            precio: parsePrice(draft.precio),
-            categoriaID: Number(draft.categoria || categorias[0].idCategoria),
-            mimeType: draft.file.type,
-            descripcion: draft.descripcion.trim() || '.',
+            name: draft.nombre.trim(),
+            price: parsePrice(draft.precio),
+            category_id: Number(draft.categoria || categorias[0].idCategoria),
+            description: draft.descripcion.trim() || '.',
           },
           draft.file,
           () => undefined,
@@ -146,13 +183,16 @@ export const ProductCreationBoard = ({ empresaID, onCreatedBatch }: ProductCreat
 
         okCount += 1
         savedIds.push(draft.id)
+        createdCodes.push(result.codigo_producto)
         createdProducts.push({
+          backend_id: result.id,
           image_url: result.imagenUrl || draft.preview,
           nombre: draft.nombre.trim(),
           precio: parsePrice(draft.precio),
           estado: 'activo',
           categoria: draft.categoria,
           descripcion: draft.descripcion.trim(),
+          codigo_producto: result.codigo_producto,
         })
         setSaveMetaById((prev) => ({ ...prev, [draft.id]: { state: 'saved' } }))
       } catch (error) {
@@ -172,7 +212,11 @@ export const ProductCreationBoard = ({ empresaID, onCreatedBatch }: ProductCreat
     }
 
     if (okCount > 0) {
-      setSaveSuccess(`Listo. Se guardaron ${okCount} producto(s).`)
+      const codeLine =
+        createdCodes.length === 1
+          ? `Codigo generado: ${createdCodes[0]}`
+          : `Codigos generados: ${createdCodes.join(', ')}`
+      setSaveSuccess(`Producto creado correctamente\n${codeLine}`)
     }
 
     if (okCount < completeDrafts.length) {
@@ -184,19 +228,78 @@ export const ProductCreationBoard = ({ empresaID, onCreatedBatch }: ProductCreat
   }
 
   return (
-    <section className="pc-create-flow" aria-label="Creacion masiva de productos">
-      <UploadArea disabled={isSaving} slotsLeft={slotsLeft} maxPhotos={MAX_PRODUCTS} onUpload={handleImageUpload} />
+    <section className="pc-shell" aria-label="Creacion de productos">
+      <div className="pc-page-header">
+        <div className="pc-page-header__copy">
+          <p className="pc-kicker">Productos</p>
+          <h2 className="pc-title">Crear productos</h2>
+          <p className="pc-subtitle">
+            Flujo visual para subir imagenes, revisar la vista previa, editar los datos y guardar sin perder el contexto.
+          </p>
+        </div>
+        <div className="pc-page-header__summary">
+          <span className="pc-summary-badge">{completeDrafts.length > 0 ? 'Completado' : 'En progreso'}</span>
+          <div className="pc-summary-card">
+            <strong>{drafts.length}</strong>
+            <span>imagenes cargadas</span>
+          </div>
+          <div className="pc-summary-card">
+            <strong>{completeDrafts.length}</strong>
+            <span>listas para guardar</span>
+          </div>
+        </div>
+      </div>
 
-      <ProductPreviewList
-        drafts={drafts}
-        disabled={isSaving}
-        categories={categorias}
-        categoryLoading={categoriasLoading}
-        saveMetaById={saveMetaById}
-        onRequestNewCategory={(draftId) => openNewCategoryDialog(draftId)}
-        onCommit={updateDraft}
-        onRemove={removeDraft}
-      />
+      <div className="pc-layout">
+        <section className="pc-panel pc-panel--upload">
+          <div className="pc-section-head">
+            <div>
+              <p className="pc-section-head__label">Subir</p>
+              <h3>Arrastra, suelta y empieza</h3>
+            </div>
+            <button
+              type="button"
+              className="pc-btn pc-btn--ghost"
+              onClick={() => openNewCategoryDialog()}
+              disabled={isSaving}
+            >
+              Nueva categoria
+            </button>
+          </div>
+
+          <UploadArea
+            disabled={isSaving}
+            slotsLeft={slotsLeft}
+            maxPhotos={MAX_PRODUCTS}
+            onUpload={handleImageUpload}
+          />
+        </section>
+
+        <section className="pc-panel pc-panel--preview">
+          <div className="pc-section-head">
+            <div>
+              <p className="pc-section-head__label">Ver y editar</p>
+              <h3>Vista previa y edicion</h3>
+            </div>
+            <span className="pc-section-head__count">{completeDrafts.length} listo(s)</span>
+          </div>
+
+          <ProductPreviewList
+            drafts={drafts}
+            disabled={isSaving}
+            categories={categorias}
+            categoryLoading={categoriasLoading}
+            saveMetaById={saveMetaById}
+            onRequestNewCategory={(draftId) => openNewCategoryDialog(draftId)}
+            onCommit={updateDraft}
+            onRemove={removeDraft}
+          />
+        </section>
+      </div>
+
+      {saveSuccess ? <p className="pc-alert pc-alert--success">{saveSuccess}</p> : null}
+      {saveError ? <p className="pc-alert pc-alert--error">{saveError}</p> : null}
+      {categoriasError ? <p className="pc-alert pc-alert--error">{categoriasError}</p> : null}
 
       <ProductActionsFooter
         isSaving={isSaving}
@@ -207,10 +310,6 @@ export const ProductCreationBoard = ({ empresaID, onCreatedBatch }: ProductCreat
         onCreateCategory={() => openNewCategoryDialog()}
         onSave={onSave}
       />
-
-      {saveSuccess ? <p className="npf-success-note">{saveSuccess}</p> : null}
-      {saveError ? <p className="npf-field-error">{saveError}</p> : null}
-      {categoriasError ? <p className="npf-field-error">{categoriasError}</p> : null}
 
       <NewCategoryDialog
         open={isCategoryDialogOpen}
