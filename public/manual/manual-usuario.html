@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Manual de usuario - Petalops</title>
+  <style>
+    :root {
+      --bg: #fff7fb;
+      --surface: rgba(255, 255, 255, 0.92);
+      --surface-strong: #ffffff;
+      --border: rgba(212, 71, 122, 0.14);
+      --ink: #1f2937;
+      --muted: #667085;
+      --accent: #d4477a;
+      --accent-soft: #fbeaf0;
+      --shadow: 0 20px 45px rgba(58, 31, 43, 0.1);
+      --radius: 26px;
+      --radius-sm: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: linear-gradient(180deg, #fffafc, #fbeff4 55%, #f7ecf1); color: var(--ink); }
+    body { font-family: Inter, "Segoe UI", system-ui, -apple-system, sans-serif; line-height: 1.5; }
+    img { max-width: 100%; display: block; }
+    a { color: inherit; }
+    .page {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 28px 22px 36px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 18px;
+      align-items: center;
+      padding: 24px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,248,251,0.94));
+      border: 1px solid var(--border);
+      border-radius: 30px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+    }
+    .hero__logo {
+      width: 72px;
+      height: 72px;
+      object-fit: contain;
+      background: #fff;
+      border-radius: 20px;
+      padding: 8px;
+      border: 1px solid rgba(212, 71, 122, 0.12);
+    }
+    .hero__eyebrow {
+      margin: 0 0 6px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(2rem, 3vw, 2.85rem);
+      line-height: 1.05;
+    }
+    .hero p {
+      margin: 10px 0 0;
+      color: var(--muted);
+      max-width: 75ch;
+    }
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .toc__item {
+      padding: 16px 18px;
+      border-radius: 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      box-shadow: 0 10px 26px rgba(58, 31, 43, 0.06);
+    }
+    .toc__item strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--accent);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .toc__item span {
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .section-title {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 28px 0 14px;
+    }
+    .section-title h2 {
+      margin: 0;
+      font-size: 1.55rem;
+    }
+    .section-title p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 58ch;
+      text-align: right;
+    }
+    .step-card {
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(380px, 1.1fr);
+      gap: 18px;
+      align-items: start;
+      padding: 18px;
+      border-radius: 28px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      margin-bottom: 18px;
+      break-inside: avoid;
+    }
+    .step-card__meta {
+      padding: 10px 8px 10px 4px;
+    }
+    .step-card__eyebrow {
+      margin: 0 0 8px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .step-card h2 {
+      margin: 0;
+      font-size: 1.45rem;
+    }
+    .step-card__description {
+      margin: 10px 0 0;
+      color: var(--muted);
+    }
+    .step-card__bullets {
+      margin: 12px 0 0;
+      padding-left: 18px;
+      color: #3f4b5b;
+    }
+    .step-card__bullets li + li { margin-top: 6px; }
+    .shot {
+      margin: 0;
+      padding: 14px;
+      border-radius: 22px;
+      background: linear-gradient(180deg, #ffffff, #fff8fb);
+      border: 1px solid rgba(212, 71, 122, 0.12);
+    }
+    .shot img {
+      width: 100%;
+      height: auto;
+      border-radius: 16px;
+      box-shadow: 0 16px 36px rgba(58, 31, 43, 0.16);
+    }
+    .shot figcaption {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .note {
+      padding: 18px 20px;
+      border-radius: 22px;
+      border: 1px solid rgba(212, 71, 122, 0.14);
+      background: linear-gradient(180deg, #fff, #fff7fb);
+      margin: 16px 0 0;
+    }
+    .note strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--accent);
+    }
+    .footer {
+      margin-top: 24px;
+      padding: 16px 4px 0;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+    .page-break { break-before: page; }
+    @page {
+      size: A4;
+      margin: 14mm;
+    }
+    @media print {
+      body { background: #fff; }
+      .page { padding: 0; }
+      .hero, .toc, .step-card, .note { box-shadow: none; }
+      .step-card { break-inside: avoid; }
+      .page-break { break-before: page; }
+    }
+    @media (max-width: 960px) {
+      .hero, .step-card { grid-template-columns: 1fr; }
+      .toc { grid-template-columns: 1fr; }
+      .section-title { flex-direction: column; align-items: start; }
+      .section-title p { text-align: left; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <img class="hero__logo" src="assets/petalops-logo.svg" alt="Petalops" />
+      <div>
+        <p class="hero__eyebrow">Manual de usuario</p>
+        <h1>Petalops Admin</h1>
+        <p>
+          Este manual resume el uso principal de la aplicación de administración: iniciar sesión,
+          revisar el catálogo, editar categorías y mantener actualizados los productos.
+        </p>
+      </div>
+    </section>
+
+    <section class="toc" aria-label="Resumen del manual">
+      <div class="toc__item">
+        <strong>1. Acceso</strong>
+        <span>Ingresa con tu correo, contraseña y tienda.</span>
+      </div>
+      <div class="toc__item">
+        <strong>2. Vista principal</strong>
+        <span>Consulta filtros, categorías y productos desde una sola pantalla.</span>
+      </div>
+      <div class="toc__item">
+        <strong>3. Categorías</strong>
+        <span>Abre la lista, busca una categoría y cámbiale el nombre.</span>
+      </div>
+      <div class="toc__item">
+        <strong>4. Nuevo producto</strong>
+        <span>Crea productos desde el flujo visual de subida y vista previa.</span>
+      </div>
+      <div class="toc__item">
+        <strong>5. Productos</strong>
+        <span>Explora por categoría y edita cada producto sin perder contexto.</span>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <h2>Uso básico de la aplicación</h2>
+        <p>Las capturas reflejan la interfaz actual para que el equipo pueda seguir el flujo real.</p>
+      </div>
+
+      
+    <section class="step-card">
+      <div class="step-card__meta">
+        <p class="step-card__eyebrow">1. Acceso al sistema</p>
+        <h2>1. Acceso al sistema</h2>
+        <p class="step-card__description">La pantalla de inicio concentra el acceso a la tienda. Aquí se ingresan el correo, la contraseña y la información del tenant para entrar al panel.</p>
+        <ul class="step-card__bullets"><li>Verifica que el correo sea el correcto.</li><li>La tienda se resuelve según el token y el slug registrados.</li></ul>
+      </div>
+      <figure class="shot">
+        <img src="assets/01-login.png" alt="1. Acceso al sistema" />
+        <figcaption>Pantalla de ingreso al sistema.</figcaption>
+      </figure>
+    </section>
+  
+
+      
+    <section class="step-card">
+      <div class="step-card__meta">
+        <p class="step-card__eyebrow">2. Vista principal</p>
+        <h2>2. Vista principal</h2>
+        <p class="step-card__description">Después de iniciar sesión, la pantalla principal reúne filtros, panel de categorías y el catálogo de productos en acordeones para cargar más rápido.</p>
+        <ul class="step-card__bullets"><li>Los bloques de categorías y productos arrancan plegados.</li><li>Puedes usar los filtros superiores para acotar la búsqueda.</li></ul>
+      </div>
+      <figure class="shot">
+        <img src="assets/02-vista-principal.png" alt="2. Vista principal" />
+        <figcaption>Vista principal del panel de administración.</figcaption>
+      </figure>
+    </section>
+  
+
+      
+    <section class="step-card">
+      <div class="step-card__meta">
+        <p class="step-card__eyebrow">3. Gestionar categorías</p>
+        <h2>3. Gestionar categorías</h2>
+        <p class="step-card__description">Abre la sección de categorías para verlas en una lista más limpia. Desde ahí puedes buscar por nombre o ID y editar el nombre sin crear una categoría nueva.</p>
+        <ul class="step-card__bullets"><li>La categoría Personalizado admite precio 0.</li><li>El panel arranca cerrado para mantener la pantalla ligera.</li></ul>
+      </div>
+      <figure class="shot">
+        <img src="assets/04-categorias.png" alt="3. Gestionar categorías" />
+        <figcaption>Listado de categorías con búsqueda y botón de edición.</figcaption>
+      </figure>
+    </section>
+  
+
+      
+    <section class="step-card">
+      <div class="step-card__meta">
+        <p class="step-card__eyebrow">4. Crear un nuevo producto</p>
+        <h2>4. Crear un nuevo producto</h2>
+        <p class="step-card__description">Desde la pantalla de productos puedes cambiar a Nuevo producto y empezar a cargar imágenes. El flujo muestra vista previa, campos de edición y el botón de guardado al final.</p>
+        <ul class="step-card__bullets"><li>Arrastra o suelta imágenes para comenzar.</li><li>Puedes volver a la lista principal cuando quieras.</li></ul>
+      </div>
+      <figure class="shot">
+        <img src="assets/03-nuevo-producto.png" alt="4. Crear un nuevo producto" />
+        <figcaption>Pantalla para crear productos desde una vista previa visual.</figcaption>
+      </figure>
+    </section>
+  
+
+      
+    <section class="step-card">
+      <div class="step-card__meta">
+        <p class="step-card__eyebrow">5. Editar una categoría</p>
+        <h2>5. Editar una categoría</h2>
+        <p class="step-card__description">Al pulsar Editar se abre un formulario más limpio y cómodo. Solo debes escribir el nuevo nombre y guardar los cambios.</p>
+        <ul class="step-card__bullets"><li>El botón Guardar se activa solo cuando el nombre es válido.</li><li>Si el backend responde error, el modal se mantiene abierto.</li></ul>
+      </div>
+      <figure class="shot">
+        <img src="assets/05-editar-categoria.png" alt="5. Editar una categoría" />
+        <figcaption>Modal uniforme para crear o editar categorías.</figcaption>
+      </figure>
+    </section>
+  
+
+      <div class="page-break"></div>
+
+      
+    <section class="step-card">
+      <div class="step-card__meta">
+        <p class="step-card__eyebrow">6. Revisar productos por categoría</p>
+        <h2>6. Revisar productos por categoría</h2>
+        <p class="step-card__description">Los productos están agrupados por categoría para evitar que la página intente renderizar todo al mismo tiempo. Abre solo la categoría que quieras revisar.</p>
+        <ul class="step-card__bullets"><li>Cada grupo muestra cuántos productos tiene.</li><li>Esto ayuda a que la pantalla cargue con menos peso visual.</li></ul>
+      </div>
+      <figure class="shot">
+        <img src="assets/06-productos.png" alt="6. Revisar productos por categoría" />
+        <figcaption>Catálogo organizado por categorías.</figcaption>
+      </figure>
+    </section>
+  
+
+      
+    <section class="step-card">
+      <div class="step-card__meta">
+        <p class="step-card__eyebrow">7. Editar un producto</p>
+        <h2>7. Editar un producto</h2>
+        <p class="step-card__description">Cada tarjeta de producto tiene acceso directo a edición, eliminación y cambio de estado. Desde el modal puedes actualizar precio, nombre, categoría, imagen y descripción.</p>
+        <ul class="step-card__bullets"><li>Guarda los cambios desde un formulario más limpio y consistente.</li><li>Si usas la categoría Personalizado, el precio 0 está permitido.</li></ul>
+      </div>
+      <figure class="shot">
+        <img src="assets/07-editar-producto.png" alt="7. Editar un producto" />
+        <figcaption>Modal de edición de producto con diseño uniforme.</figcaption>
+      </figure>
+    </section>
+  
+    </section>
+
+    <section class="note">
+      <strong>Recomendación de uso</strong>
+      <div>
+        Si la pantalla se siente pesada, deja plegadas las secciones que no estás usando. El catálogo
+        está organizado justamente para que el panel siga respondiendo rápido aun con muchos productos.
+      </div>
+    </section>
+
+    <div class="footer">
+      Manual generado con capturas actuales de Petalops Admin.
+    </div>
+  </main>
+</body>
+</html>
