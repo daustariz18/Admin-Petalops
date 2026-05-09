@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { apiClient } from '../../services/apiClient'
 import { buildApiUrl } from '../../services/apiUrl'
 import { buildProductsEndpoint } from '../../services/productPaths'
+import { prepareImageFileForUpload } from '../../services/productService'
 
 export type ProductStatus = 'activo' | 'inactivo'
 
@@ -26,7 +27,7 @@ type UseProductsReturn = {
   reloadProducts: () => Promise<ProductItem[]>
   updateProduct: (id: string, patch: Partial<Omit<ProductItem, 'id'>>) => Promise<boolean>
   toggleProductStatus: (id: string) => Promise<boolean>
-  removeProduct: (id: string) => Promise<'deleted' | 'backend_locked' | 'not_found' | 'error'>
+  removeProduct: (id: string) => Promise<'deleted' | 'conflict' | 'backend_locked' | 'not_found' | 'error'>
   replaceProductImage: (
     id: string,
     input: { file?: File; s3Key?: string },
@@ -314,6 +315,17 @@ function buildUpdateEndpoints(productId: string, empresaID: string): string[] {
   return [`${buildProductsEndpoint(productId)}?${query}`, buildProductsEndpoint(productId)]
 }
 
+function buildDeleteEndpoints(productId: string, empresaID: string): string[] {
+  const query = `empresa_id=${encodeURIComponent(empresaID)}`
+  return [
+    `${buildProductsEndpoint(productId)}?${query}`,
+    `${buildProductsEndpoint(productId)}?empresaID=${encodeURIComponent(empresaID)}`,
+    buildProductsEndpoint(productId),
+    `${buildProductsEndpoint(productId, 'eliminar')}?${query}`,
+    `${buildProductsEndpoint(productId, 'delete')}?${query}`,
+  ]
+}
+
 export function useProducts(empresaID: string): UseProductsReturn {
   const revokedRef = useRef<Set<string>>(new Set())
 
@@ -526,7 +538,7 @@ export function useProducts(empresaID: string): UseProductsReturn {
   )
 
   const removeProduct = useCallback(
-    async (id: string): Promise<'deleted' | 'backend_locked' | 'not_found' | 'error'> => {
+    async (id: string): Promise<'deleted' | 'conflict' | 'backend_locked' | 'not_found' | 'error'> => {
       const localProduct = productosLocal.find((product) => product.id === id)
       if (localProduct) {
         setProductosLocal((prev) => {
@@ -541,11 +553,54 @@ export function useProducts(empresaID: string): UseProductsReturn {
       }
 
       const backendProduct = productosBackend.find((product) => product.id === id)
-      if (backendProduct) return 'backend_locked'
+      if (backendProduct) {
+        const candidateIds = Array.from(
+          new Set([
+            backendProduct.backend_id && Number.isFinite(backendProduct.backend_id)
+              ? String(backendProduct.backend_id)
+              : '',
+            id,
+          ].filter(Boolean)),
+        )
+
+        const endpoints = candidateIds.flatMap((candidateId) => buildDeleteEndpoints(candidateId, empresaID))
+        const methods: Array<'delete' | 'patch'> = ['delete', 'patch']
+
+        try {
+          for (const endpoint of endpoints) {
+            for (const method of methods) {
+              try {
+                await apiClient.request({
+                  url: endpoint,
+                  method,
+                  headers: {
+                    'X-Empresa-Id': empresaID,
+                  },
+                })
+                await loadProducts(true)
+                return 'deleted'
+              } catch (error: unknown) {
+                const status = (error as { response?: { status?: number } })?.response?.status
+                if (status === 409) {
+                  return 'conflict'
+                }
+                if (status === 404 || status === 405 || status === 422 || status === 400) {
+                  continue
+                }
+                throw error
+              }
+            }
+          }
+        } catch {
+          return 'error'
+        }
+
+        return 'backend_locked'
+      }
 
       return 'not_found'
     },
-    [productosBackend, productosLocal],
+    [empresaID, loadProducts, productosBackend, productosLocal],
   )
 
   const replaceProductImage = useCallback(
@@ -600,9 +655,10 @@ export function useProducts(empresaID: string): UseProductsReturn {
         const response = input.file
           ? await apiClient.patch(
               endpoint,
-              (() => {
+              await (async () => {
+                const prepared = await prepareImageFileForUpload(input.file as File)
                 const formData = new FormData()
-                formData.append('file', input.file as Blob)
+                formData.append('file', prepared.file)
                 formData.append('empresa_id', String(empresaID))
                 return formData
               })(),

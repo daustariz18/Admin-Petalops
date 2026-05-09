@@ -303,7 +303,15 @@ export default function ProductosPage({
     }
 
     if (result === 'backend_locked') {
-      showToast('Solo puedes eliminar productos creados localmente.', 'info')
+      showToast('No se pudo eliminar el producto en el backend.', 'error')
+      return
+    }
+
+    if (result === 'conflict') {
+      showToast(
+        'El backend no permite eliminar este producto porque probablemente ya está en uso. Prueba desactivándolo.',
+        'error',
+      )
       return
     }
 

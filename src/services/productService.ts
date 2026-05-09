@@ -10,7 +10,11 @@ import { apiClient } from './apiClient'
 import { buildProductsEndpoint, getProductsBasePath } from './productPaths'
 
 const USE_MOCK = import.meta.env.VITE_USE_UPLOAD_MOCK === 'true'
-const FORCE_UPLOAD_MIME = 'image/png'
+const OPTIMIZED_IMAGE_MIME = 'image/webp'
+const MAX_UPLOAD_DIMENSIONS = [1600, 1400, 1200, 1000, 800, 640, 480, 360] as const
+const MAX_UPLOAD_SIZE_KB = 400
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_SIZE_KB * 1024
+const UPLOAD_QUALITY_STEPS = [0.82, 0.72, 0.62, 0.52, 0.42, 0.32, 0.24, 0.18] as const
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -18,8 +22,6 @@ function sleep(ms: number): Promise<void> {
 
 export const ACCEPTED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const
 export type AcceptedMimeType = (typeof ACCEPTED_MIME_TYPES)[number]
-
-const MAX_SIZE_BYTES = 5 * 1024 * 1024
 
 function normalizeMimeFromExtension(fileName: string): AcceptedMimeType | '' {
   const lower = fileName.trim().toLowerCase()
@@ -55,11 +57,80 @@ export function validateImageFile(file: File): string | null {
     return `Formato no permitido (detectado: ${normalizedType}). Usa JPG, PNG o WEBP.`
   }
 
-  if (file.size > MAX_SIZE_BYTES) {
-    return `El archivo supera 5 MB (tiene ${(file.size / 1024 / 1024).toFixed(2)} MB).`
+  return null
+}
+
+function getResizedDimensions(width: number, height: number, maxDimension: number): { width: number; height: number } {
+  const longestEdge = Math.max(width, height)
+  if (longestEdge <= maxDimension) {
+    return { width, height }
   }
 
-  return null
+  const scale = maxDimension / longestEdge
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  }
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, mimeType: string, quality?: number): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), mimeType, quality)
+  })
+}
+
+function getUploadExtension(mimeType: string): string {
+  if (mimeType === 'image/webp') return '.webp'
+  return '.jpg'
+}
+
+export async function prepareImageFileForUpload(file: File): Promise<{ file: File; mimeType: string }> {
+  const normalized = normalizeImageMimeType(file)
+
+  try {
+    const bitmap = await createImageBitmap(file)
+    try {
+      if (normalized === OPTIMIZED_IMAGE_MIME && file.size <= MAX_UPLOAD_BYTES) {
+        return { file, mimeType: OPTIMIZED_IMAGE_MIME }
+      }
+
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      if (!ctx) throw new Error('No se pudo preparar el lienzo de conversion.')
+
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
+
+      for (const maxDimension of MAX_UPLOAD_DIMENSIONS) {
+        const { width, height } = getResizedDimensions(bitmap.width, bitmap.height, maxDimension)
+        canvas.width = width
+        canvas.height = height
+        ctx.clearRect(0, 0, width, height)
+        ctx.drawImage(bitmap, 0, 0, width, height)
+
+        for (const quality of UPLOAD_QUALITY_STEPS) {
+          const blob = await canvasToBlob(canvas, OPTIMIZED_IMAGE_MIME, quality)
+          if (!blob) continue
+
+          if (blob.size <= MAX_UPLOAD_BYTES) {
+            const baseName = file.name.replace(/\.[^.]+$/, '') || `foto-${Date.now()}`
+            const convertedFile = new File([blob], `${baseName}${getUploadExtension(OPTIMIZED_IMAGE_MIME)}`, {
+              type: OPTIMIZED_IMAGE_MIME,
+              lastModified: Date.now(),
+            })
+
+            return { file: convertedFile, mimeType: OPTIMIZED_IMAGE_MIME }
+          }
+        }
+      }
+
+      throw new Error(`No se pudo reducir la imagen a ${MAX_UPLOAD_SIZE_KB} KB o menos.`)
+    } finally {
+      bitmap.close()
+    }
+  } catch {
+    throw new Error(`No se pudo convertir la imagen a WebP de hasta ${MAX_UPLOAD_SIZE_KB} KB.`)
+  }
 }
 
 function extractAxiosErrorText(error: unknown): string {
@@ -276,7 +347,7 @@ export async function createProduct(
         .toString()
         .padStart(4, '0')}`,
       uploadUrl: 'https://mock-s3.local/upload/mock-key',
-      s3Key: `productos/${normalizedEmpresaID}/mock-id/${crypto.randomUUID()}.jpg`,
+      s3Key: `productos/${normalizedEmpresaID}/mock-id/${crypto.randomUUID()}.webp`,
       expiresIn: 300,
     }
   }
@@ -331,6 +402,10 @@ export async function uploadToS3(signedUrl: string, file: File): Promise<void> {
 
   if (!normalizedUrl || normalizedUrl.toLowerCase() === 'undefined' || normalizedUrl.endsWith('/undefined')) {
     throw new Error('No se pudo preparar la subida de la foto. Intenta nuevamente.')
+  }
+
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error(`La imagen final supera ${MAX_UPLOAD_SIZE_KB} KB y no se puede subir.`)
   }
 
   if (USE_MOCK) {
@@ -407,50 +482,7 @@ export async function createProductWithImage(
   file: File,
   onStepChange: (step: 'creating' | 'uploading' | 'confirming') => void,
 ): Promise<CreateProductResult> {
-  const prepareFileForUpload = async () => {
-    const normalized = normalizeImageMimeType(file)
-    if (normalized === FORCE_UPLOAD_MIME) {
-      return { file, mimeType: FORCE_UPLOAD_MIME }
-    }
-
-    try {
-      const bitmap = await createImageBitmap(file)
-      const canvas = document.createElement('canvas')
-      canvas.width = bitmap.width
-      canvas.height = bitmap.height
-      const ctx = canvas.getContext('2d')
-      if (!ctx) throw new Error('No se pudo preparar el lienzo de conversion.')
-      ctx.drawImage(bitmap, 0, 0)
-      bitmap.close()
-
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob(
-          (nextBlob) => {
-            if (!nextBlob) {
-              reject(new Error('No se pudo convertir la imagen a PNG.'))
-              return
-            }
-            resolve(nextBlob)
-          },
-          FORCE_UPLOAD_MIME,
-          0.95,
-        )
-      })
-
-      const ext = '.png'
-      const baseName = file.name.replace(/\.[^.]+$/, '') || `foto-${Date.now()}`
-      const convertedFile = new File([blob], `${baseName}${ext}`, {
-        type: FORCE_UPLOAD_MIME,
-        lastModified: Date.now(),
-      })
-
-      return { file: convertedFile, mimeType: FORCE_UPLOAD_MIME }
-    } catch {
-      return { file, mimeType: normalized || 'image/jpeg' }
-    }
-  }
-
-  const prepared = await prepareFileForUpload()
+  const prepared = await prepareImageFileForUpload(file)
 
   onStepChange('creating')
   const created = await createProduct(empresaID, {

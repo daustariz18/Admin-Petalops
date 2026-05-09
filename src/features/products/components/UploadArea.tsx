@@ -47,7 +47,7 @@ export function UploadArea({ disabled, slotsLeft, maxPhotos, onUpload }: UploadA
 
       <div className="pc-dropzone__copy">
         <p>Arrastra tus imagenes o haz clic para subir</p>
-        <small>Sube fotos claras para crear tarjetas de producto mas limpias.</small>
+        <small>Las fotos se convierten a WebP y se optimizan para reducir peso en KB y consumo de CDN.</small>
       </div>
 
       <div className="pc-dropzone__actions">
