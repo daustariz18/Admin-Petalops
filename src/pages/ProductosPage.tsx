@@ -126,6 +126,9 @@ export default function ProductosPage({
     creatingCategoria,
     updateCategoria,
     updatingCategoria,
+    toggleCategoriaStatus,
+    deleteCategoria,
+    deletingCategoria,
   } = useCategorias(empresaID)
 
   const [currentView, setCurrentView] = useState<'list' | 'new'>('list')
@@ -147,6 +150,9 @@ export default function ProductosPage({
   const [imageError, setImageError] = useState('')
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [toast, setToast] = useState<ToastState>(null)
+  const [deleteConflictProduct, setDeleteConflictProduct] = useState<ProductItem | null>(null)
+  const [categoryDeleteTarget, setCategoryDeleteTarget] = useState<Categoria | null>(null)
+  const [categoryDeleteConflict, setCategoryDeleteConflict] = useState<Categoria | null>(null)
   const [categoryToEdit, setCategoryToEdit] = useState<Categoria | null>(null)
   const [categoryEditName, setCategoryEditName] = useState('')
   const [categoryEditError, setCategoryEditError] = useState('')
@@ -208,6 +214,18 @@ export default function ProductosPage({
     }
 
     return 'Sin categoria'
+  }
+
+  const getCategoriaEstado = (categoria: Categoria): 'activo' | 'inactivo' => {
+    if (typeof categoria.active === 'boolean') {
+      return categoria.active ? 'activo' : 'inactivo'
+    }
+
+    if (typeof categoria.activo === 'boolean') {
+      return categoria.activo ? 'activo' : 'inactivo'
+    }
+
+    return categoria.estado === 'inactivo' ? 'inactivo' : 'activo'
   }
 
   const categoriasFiltrables = useMemo(() => {
@@ -296,31 +314,49 @@ export default function ProductosPage({
   const confirmarEliminar = async () => {
     if (!modalEliminar) return
     const result = await removeProduct(modalEliminar.id)
-    setModalEliminar(null)
     if (result === 'deleted') {
+      setModalEliminar(null)
+      setDeleteConflictProduct(null)
       showToast('Producto eliminado correctamente.', 'info')
       return
     }
 
     if (result === 'backend_locked') {
+      setModalEliminar(null)
+      setDeleteConflictProduct(null)
       showToast('No se pudo eliminar el producto en el backend.', 'error')
       return
     }
 
     if (result === 'conflict') {
-      showToast(
-        'El backend no permite eliminar este producto porque probablemente ya está en uso. Prueba desactivándolo.',
-        'error',
-      )
+      setDeleteConflictProduct(modalEliminar)
       return
     }
 
     if (result === 'not_found') {
+      setModalEliminar(null)
+      setDeleteConflictProduct(null)
       showToast('El producto no existe en esta empresa.', 'info')
       return
     }
 
+    setModalEliminar(null)
+    setDeleteConflictProduct(null)
     showToast('No se pudo eliminar el producto. Intenta de nuevo.', 'error')
+  }
+
+  const handleDeactivateInsteadOfDelete = async () => {
+    if (!modalEliminar) return
+
+    const ok = await toggleProductStatus(modalEliminar.id)
+    if (!ok) {
+      showToast('No se pudo desactivar el producto.', 'error')
+      return
+    }
+
+    setModalEliminar(null)
+    setDeleteConflictProduct(null)
+    showToast('Producto desactivado correctamente.', 'success')
   }
 
   const openEditarModal = (producto: ProductItem) => {
@@ -426,6 +462,69 @@ export default function ProductosPage({
       setToast({ message, type: 'error' })
     } finally {
       setIsSavingCategoryEdit(false)
+    }
+  }
+
+  const handleToggleCategoriaStatus = async (categoria: Categoria) => {
+    try {
+      await toggleCategoriaStatus(categoria.idCategoria)
+      await reloadProducts()
+      const nextEstado = getCategoriaEstado(categoria) === 'activo' ? 'inactivo' : 'activo'
+      showToast(`Categoria marcada como ${nextEstado}.`, 'success')
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : 'No se pudo actualizar el estado de la categoria.'
+      showToast(message, 'error')
+    }
+  }
+
+  const handleDeleteCategoria = async () => {
+    if (!categoryDeleteTarget) return
+
+    const result = await deleteCategoria(categoryDeleteTarget.idCategoria)
+
+    if (result === 'deleted') {
+      setCategoryDeleteTarget(null)
+      setCategoryDeleteConflict(null)
+      showToast('Categoria eliminada correctamente.', 'info')
+      await reloadProducts()
+      return
+    }
+
+    if (result === 'conflict') {
+      setCategoryDeleteConflict(categoryDeleteTarget)
+      return
+    }
+
+    if (result === 'not_found') {
+      setCategoryDeleteTarget(null)
+      setCategoryDeleteConflict(null)
+      showToast('La categoria no existe o ya fue eliminada.', 'info')
+      return
+    }
+
+    setCategoryDeleteTarget(null)
+    setCategoryDeleteConflict(null)
+    showToast('No se pudo eliminar la categoria. Intenta de nuevo.', 'error')
+  }
+
+  const handleDeactivateCategoryInsteadOfDelete = async () => {
+    if (!categoryDeleteTarget) return
+
+    try {
+      await toggleCategoriaStatus(categoryDeleteTarget.idCategoria)
+      await reloadProducts()
+      setCategoryDeleteTarget(null)
+      setCategoryDeleteConflict(null)
+      showToast('Categoria desactivada correctamente.', 'success')
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : 'No se pudo desactivar la categoria.'
+      showToast(message, 'error')
     }
   }
 
@@ -786,13 +885,48 @@ export default function ProductosPage({
                         </div>
                         <span>ID {categoria.idCategoria}</span>
                       </div>
-                      <button
-                        type="button"
-                        className="pp-btn pp-btn--ghost pp-category-row__button"
-                        onClick={() => openCategoryEditModal(categoria)}
-                      >
-                        Editar
-                      </button>
+                      <div className="pp-category-row__actions">
+                        <span
+                          className={`pp-status-badge ${
+                            getCategoriaEstado(categoria) === 'activo' ? 'is-active' : 'is-inactive'
+                          }`}
+                        >
+                          {getCategoriaEstado(categoria) === 'activo' ? 'Activa' : 'Inactiva'}
+                        </span>
+                        <button
+                          type="button"
+                          className={`pp-switch ${getCategoriaEstado(categoria) === 'activo' ? 'is-on' : 'is-off'}`}
+                          aria-label={
+                            getCategoriaEstado(categoria) === 'activo'
+                              ? 'Desactivar categoria'
+                              : 'Activar categoria'
+                          }
+                          onClick={() => void handleToggleCategoriaStatus(categoria)}
+                          disabled={updatingCategoria}
+                        >
+                          <span className="pp-switch-thumb" />
+                        </button>
+                        <button
+                          type="button"
+                          className="pp-btn pp-btn--ghost pp-category-row__button"
+                          onClick={() => openCategoryEditModal(categoria)}
+                          disabled={updatingCategoria}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="pp-btn pp-btn--danger-soft pp-category-row__button"
+                          onClick={() => {
+                            setCategoryDeleteConflict(null)
+                            setCategoryDeleteTarget(categoria)
+                          }}
+                          disabled={updatingCategoria || deletingCategoria}
+                        >
+                          <TrashIcon />
+                          <span>Eliminar</span>
+                        </button>
+                      </div>
                     </article>
                   ))}
                 </div>
@@ -974,7 +1108,10 @@ export default function ProductosPage({
                                           <button
                                             type="button"
                                             className="pp-btn pp-btn--danger-soft"
-                                            onClick={() => setModalEliminar(producto)}
+                                            onClick={() => {
+                                              setDeleteConflictProduct(null)
+                                              setModalEliminar(producto)
+                                            }}
                                           >
                                             <TrashIcon />
                                             <span>Eliminar</span>
@@ -1014,18 +1151,45 @@ export default function ProductosPage({
 
       {modalEliminar ? (
         <div className="pp-modal" role="dialog" aria-modal="true" aria-label="Confirmar eliminacion">
-          <div className="pp-modal-overlay" onClick={() => setModalEliminar(null)} />
+          <div
+            className="pp-modal-overlay"
+            onClick={() => {
+              setModalEliminar(null)
+              setDeleteConflictProduct(null)
+            }}
+          />
           <div className="pp-modal-card">
             <WarningIcon />
-            <h3>¿Eliminar producto?</h3>
-            <p>Esta accion no se puede deshacer. El producto sera eliminado permanentemente.</p>
+            <h3>{deleteConflictProduct ? 'No se puede eliminar este producto' : '¿Eliminar producto?'}</h3>
+            <p>
+              {deleteConflictProduct
+                ? 'Este producto ya tiene pedidos asociados. Puedes desactivarlo para ocultarlo del catalogo sin borrar su historial.'
+                : 'Esta accion no se puede deshacer. El producto sera eliminado permanentemente.'}
+            </p>
             <div className="pp-modal-actions">
-              <button type="button" className="pp-btn pp-btn--ghost" onClick={() => setModalEliminar(null)}>
+              <button
+                type="button"
+                className="pp-btn pp-btn--ghost"
+                onClick={() => {
+                  setModalEliminar(null)
+                  setDeleteConflictProduct(null)
+                }}
+              >
                 Cancelar
               </button>
-              <button type="button" className="pp-btn pp-btn--danger" onClick={() => void confirmarEliminar()}>
-                Si, eliminar
-              </button>
+              {deleteConflictProduct ? (
+                <button
+                  type="button"
+                  className="pp-btn pp-btn--primary"
+                  onClick={() => void handleDeactivateInsteadOfDelete()}
+                >
+                  Desactivar
+                </button>
+              ) : (
+                <button type="button" className="pp-btn pp-btn--danger" onClick={() => void confirmarEliminar()}>
+                  Si, eliminar
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1183,6 +1347,57 @@ export default function ProductosPage({
         onCancel={closeCategoryEditModal}
         onSubmit={() => void guardarCategoriaEdicion()}
       />
+
+      {categoryDeleteTarget ? (
+        <div className="pp-modal" role="dialog" aria-modal="true" aria-label="Confirmar eliminacion de categoria">
+          <div
+            className="pp-modal-overlay"
+            onClick={() => {
+              setCategoryDeleteTarget(null)
+              setCategoryDeleteConflict(null)
+            }}
+          />
+          <div className="pp-modal-card">
+            <WarningIcon />
+            <h3>{categoryDeleteConflict ? 'No se puede eliminar esta categoria' : '¿Eliminar categoria?'}</h3>
+            <p>
+              {categoryDeleteConflict
+                ? 'Esta categoria tiene productos asociados. Puedes desactivarla para ocultarla sin borrar su historial.'
+                : 'Esta accion no se puede deshacer. La categoria sera eliminada solo si no tiene productos asociados.'}
+            </p>
+            <div className="pp-modal-actions">
+              <button
+                type="button"
+                className="pp-btn pp-btn--ghost"
+                onClick={() => {
+                  setCategoryDeleteTarget(null)
+                  setCategoryDeleteConflict(null)
+                }}
+              >
+                Cancelar
+              </button>
+              {categoryDeleteConflict ? (
+                <button
+                  type="button"
+                  className="pp-btn pp-btn--primary"
+                  onClick={() => void handleDeactivateCategoryInsteadOfDelete()}
+                >
+                  Desactivar
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="pp-btn pp-btn--danger"
+                  onClick={() => void handleDeleteCategoria()}
+                  disabled={deletingCategoria}
+                >
+                  Si, eliminar
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {toast ? (
         <div className={`pp-toast pp-toast--${toast.type}`} role="status" aria-live="polite">

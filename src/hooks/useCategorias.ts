@@ -2,17 +2,28 @@ import { useCallback, useEffect, useState } from 'react'
 import { getStoredToken } from '../auth/authStorage'
 import { apiClient } from '../services/apiClient'
 import { buildApiUrl } from '../services/apiUrl'
-import { updateCategory as updateCategoryRequest } from '../services/categoryService'
+import {
+  type CategoryResult,
+  type CategoryStatus,
+  deleteCategory as deleteCategoryRequest,
+  updateCategory as updateCategoryRequest,
+  updateCategoryStatus as updateCategoryStatusRequest,
+} from '../services/categoryService'
 
 export type Categoria = {
   idCategoria: number
   nombre: string
+  active?: boolean
+  activo?: boolean
+  estado?: CategoryStatus
 }
 
 type CategoryCacheEntry = {
   items: Categoria[]
   loadedAt: number
 }
+
+type DeleteCategoriaResult = 'deleted' | 'conflict' | 'not_found' | 'error'
 
 const FALLBACK_CATEGORIAS_RAW =
   (import.meta.env.VITE_FALLBACK_CATEGORIAS as string | undefined)?.trim() ?? ''
@@ -36,6 +47,10 @@ function parseCategoria(value: unknown): Categoria | null {
     categoria_id?: unknown
     nombre?: unknown
     name?: unknown
+    active?: unknown
+    activo?: unknown
+    estado?: unknown
+    status?: unknown
   }
 
   const rawId =
@@ -44,12 +59,33 @@ function parseCategoria(value: unknown): Categoria | null {
 
   const idCategoria = Number(rawId)
   const nombre = typeof rawNombre === 'string' ? rawNombre.trim() : ''
+  const rawActive = source.active ?? source.activo ?? source.estado ?? source.status
+  const estado =
+    typeof rawActive === 'boolean'
+      ? rawActive
+        ? 'activo'
+        : 'inactivo'
+      : typeof rawActive === 'string'
+        ? (['activo', 'active', '1', 'true', 'enabled', 'habilitado'].includes(rawActive.trim().toLowerCase())
+            ? 'activo'
+            : ['inactivo', 'inactive', '0', 'false', 'disabled', 'deshabilitado'].includes(rawActive.trim().toLowerCase())
+              ? 'inactivo'
+              : undefined)
+        : undefined
+  const active =
+    typeof source.active === 'boolean'
+      ? source.active
+      : typeof source.activo === 'boolean'
+        ? source.activo
+        : estado
+          ? estado === 'activo'
+          : undefined
 
   if (!Number.isFinite(idCategoria) || idCategoria <= 0 || !nombre) {
     return null
   }
 
-  return { idCategoria, nombre }
+  return { idCategoria, nombre, active, activo: active, estado }
 }
 
 function parseCreatedCategoriaResponse(payload: unknown): Categoria | null {
@@ -70,6 +106,31 @@ function parseCreatedCategoriaResponse(payload: unknown): Categoria | null {
   }
 
   return null
+}
+
+function getCategoriaEstado(categoria: Categoria): CategoryStatus {
+  if (typeof categoria.active === 'boolean') {
+    return categoria.active ? 'activo' : 'inactivo'
+  }
+
+  if (typeof categoria.activo === 'boolean') {
+    return categoria.activo ? 'activo' : 'inactivo'
+  }
+
+  return categoria.estado === 'inactivo' ? 'inactivo' : 'activo'
+}
+
+function mergeCategoriaState(base: Categoria | undefined, next: Partial<CategoryResult> & { idCategoria: number }): Categoria {
+  const active = typeof next.active === 'boolean' ? next.active : typeof next.activo === 'boolean' ? next.activo : base?.active ?? base?.activo
+  const estado = next.estado ?? (typeof active === 'boolean' ? (active ? 'activo' : 'inactivo') : base?.estado)
+
+  return {
+    idCategoria: next.idCategoria,
+    nombre: (next.nombre && next.nombre.trim()) || base?.nombre || '',
+    active,
+    activo: typeof active === 'boolean' ? active : undefined,
+    estado,
+  }
 }
 
 function normalizeCategorias(payload: unknown): Categoria[] {
@@ -142,6 +203,7 @@ export function useCategorias(empresaID?: string) {
   const [categoriasError, setCategoriasError] = useState('')
   const [creatingCategoria, setCreatingCategoria] = useState(false)
   const [updatingCategoria, setUpdatingCategoria] = useState(false)
+  const [deletingCategoria, setDeletingCategoria] = useState(false)
 
   useEffect(() => {
     const loadCategorias = async () => {
@@ -267,7 +329,7 @@ export function useCategorias(empresaID?: string) {
         const endpoint = `/categorias?empresa_id=${encodeURIComponent(normalizedEmpresaID)}`
         const response = await apiClient.post(
           buildApiUrl(endpoint),
-          { nombre, empresaID: normalizedEmpresaID },
+          { nombre, name: nombre, empresaID: normalizedEmpresaID },
           {
             headers: {
               'X-Empresa-Id': normalizedEmpresaID,
@@ -312,22 +374,14 @@ export function useCategorias(empresaID?: string) {
 
       try {
         const updated = await updateCategoryRequest(idCategoria, nombre, normalizedEmpresaID)
-        const nextCategoria: Categoria = {
-          idCategoria: updated.idCategoria,
-          nombre: updated.nombre,
-        }
-
-        setCategorias((prev) =>
-          prev.map((categoria) =>
-            categoria.idCategoria === idCategoria ? nextCategoria : categoria,
-          ),
-        )
-        storeCategoriasCache(
-          normalizedEmpresaID,
-          categorias.map((categoria) =>
-            categoria.idCategoria === idCategoria ? nextCategoria : categoria,
-          ),
-        )
+        let nextCategoria!: Categoria
+        setCategorias((prev) => {
+          const current = prev.find((categoria) => categoria.idCategoria === idCategoria)
+          nextCategoria = mergeCategoriaState(current, updated)
+          const next = prev.map((categoria) => (categoria.idCategoria === idCategoria ? nextCategoria : categoria))
+          storeCategoriasCache(normalizedEmpresaID, next)
+          return next
+        })
         setCategoriasError('')
         return nextCategoria
       } catch (error) {
@@ -340,7 +394,86 @@ export function useCategorias(empresaID?: string) {
         setUpdatingCategoria(false)
       }
     },
+    [empresaID],
+  )
+
+  const toggleCategoriaStatus = useCallback(
+    async (idCategoria: number): Promise<Categoria> => {
+      const normalizedEmpresaID = empresaID?.trim() ?? ''
+
+      if (!normalizedEmpresaID) {
+        throw new Error('No se pudo identificar la tienda para actualizar la categoria.')
+      }
+
+      const currentCategoria = categorias.find((categoria) => categoria.idCategoria === idCategoria)
+      if (!currentCategoria) {
+        throw new Error('No se encontro la categoria seleccionada.')
+      }
+
+      const nextActive = getCategoriaEstado(currentCategoria) !== 'activo'
+
+      setUpdatingCategoria(true)
+
+      try {
+        const updated = await updateCategoryStatusRequest(idCategoria, nextActive, normalizedEmpresaID)
+        let nextCategoria!: Categoria
+
+        setCategorias((prev) => {
+          const current = prev.find((categoria) => categoria.idCategoria === idCategoria)
+          nextCategoria = mergeCategoriaState(current, updated)
+          const next = prev.map((categoria) => (categoria.idCategoria === idCategoria ? nextCategoria : categoria))
+          storeCategoriasCache(normalizedEmpresaID, next)
+          return next
+        })
+
+        setCategoriasError('')
+        return nextCategoria
+      } catch (error) {
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message
+            : 'No se pudo actualizar el estado de la categoria.'
+        throw new Error(message)
+      } finally {
+        setUpdatingCategoria(false)
+      }
+    },
     [empresaID, categorias],
+  )
+
+  const deleteCategoria = useCallback(
+    async (idCategoria: number): Promise<DeleteCategoriaResult> => {
+      const normalizedEmpresaID = empresaID?.trim() ?? ''
+
+      if (!normalizedEmpresaID) {
+        return 'error'
+      }
+
+      setDeletingCategoria(true)
+
+      try {
+        await deleteCategoryRequest(idCategoria, normalizedEmpresaID)
+        setCategorias((prev) => {
+          const next = prev.filter((categoria) => categoria.idCategoria !== idCategoria)
+          storeCategoriasCache(normalizedEmpresaID, next)
+          return next
+        })
+        setCategoriasError('')
+        return 'deleted'
+      } catch (error) {
+        const status = (error as { response?: { status?: number } })?.response?.status
+        if (status === 409) {
+          return 'conflict'
+        }
+        if (status === 404) {
+          return 'not_found'
+        }
+        return 'error'
+      } finally {
+        setDeletingCategoria(false)
+      }
+    },
+    [empresaID],
   )
 
   return {
@@ -349,7 +482,10 @@ export function useCategorias(empresaID?: string) {
     categoriasError,
     creatingCategoria,
     updatingCategoria,
+    deletingCategoria,
     createCategoria,
     updateCategoria,
+    toggleCategoriaStatus,
+    deleteCategoria,
   }
 }

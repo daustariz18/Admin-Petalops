@@ -2,20 +2,50 @@ import { apiClient } from './apiClient'
 
 export type CategoryApiResponse = {
   id?: unknown
+  idCategoria?: unknown
+  id_categoria?: unknown
+  categoriaID?: unknown
+  categoria_id?: unknown
   name?: unknown
   nombre?: unknown
+  active?: unknown
+  activo?: unknown
+  estado?: unknown
+  status?: unknown
 }
 
-export type CategoryUpdateResult = {
+export type CategoryStatus = 'activo' | 'inactivo'
+
+export type CategoryResult = {
   idCategoria: number
   nombre: string
+  active?: boolean
+  activo?: boolean
+  estado?: CategoryStatus
 }
 
 function toStringOrEmpty(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function normalizeCategoryResponse(payload: unknown, fallbackId: number): CategoryUpdateResult | null {
+function normalizeCategoryStatus(value: unknown): CategoryStatus | undefined {
+  if (typeof value === 'boolean') return value ? 'activo' : 'inactivo'
+
+  const raw = toStringOrEmpty(value).toLowerCase()
+  if (!raw) return undefined
+
+  if (['activo', 'active', '1', 'true', 'enabled', 'habilitado'].includes(raw)) {
+    return 'activo'
+  }
+
+  if (['inactivo', 'inactive', '0', 'false', 'disabled', 'deshabilitado'].includes(raw)) {
+    return 'inactivo'
+  }
+
+  return undefined
+}
+
+function normalizeCategoryResponse(payload: unknown, fallbackId: number): CategoryResult | null {
   if (!payload || typeof payload !== 'object') return null
 
   const record = payload as CategoryApiResponse & {
@@ -34,14 +64,31 @@ function normalizeCategoryResponse(payload: unknown, fallbackId: number): Catego
           : null
 
   const merged = nested ? { ...record, ...nested } : record
-  const idCategoria = Number(merged.id ?? fallbackId)
+  const idCategoria = Number(
+    merged.id ??
+      merged.idCategoria ??
+      merged.id_categoria ??
+      merged.categoriaID ??
+      merged.categoria_id ??
+      fallbackId,
+  )
   const nombre = toStringOrEmpty(merged.nombre) || toStringOrEmpty(merged.name)
+  const estado = normalizeCategoryStatus(merged.estado ?? merged.status ?? merged.activo ?? merged.active)
+  const active =
+    typeof merged.active === 'boolean'
+      ? merged.active
+      : typeof merged.activo === 'boolean'
+        ? merged.activo
+        : estado
+          ? estado === 'activo'
+          : undefined
+  const activo = typeof merged.activo === 'boolean' ? merged.activo : active
 
   if (!Number.isFinite(idCategoria) || idCategoria <= 0 || !nombre) {
     return null
   }
 
-  return { idCategoria, nombre }
+  return { idCategoria, nombre, active, activo, estado }
 }
 
 function extractErrorMessage(error: unknown, fallback: string): string {
@@ -82,7 +129,7 @@ export async function updateCategory(
   idCategoria: number,
   nombre: string,
   empresaID?: string,
-): Promise<CategoryUpdateResult> {
+): Promise<CategoryResult> {
   const normalizedNombre = nombre.trim()
   const normalizedEmpresaID = empresaID?.trim() ?? ''
 
@@ -97,7 +144,7 @@ export async function updateCategory(
   try {
     const response = await apiClient.patch(
       `/categorias/${encodeURIComponent(String(idCategoria))}`,
-      { nombre: normalizedNombre },
+      { nombre: normalizedNombre, name: normalizedNombre },
       {
         headers: {
           ...(normalizedEmpresaID ? { 'X-Empresa-Id': normalizedEmpresaID } : {}),
@@ -113,5 +160,71 @@ export async function updateCategory(
     return parsed
   } catch (error) {
     throw new Error(`No se pudo actualizar la categoria. ${extractErrorMessage(error, 'Error desconocido.')}`)
+  }
+}
+
+export async function updateCategoryStatus(
+  idCategoria: number,
+  active: boolean,
+  empresaID?: string,
+): Promise<CategoryResult> {
+  const normalizedEmpresaID = empresaID?.trim() ?? ''
+
+  if (!Number.isFinite(idCategoria) || idCategoria <= 0) {
+    throw new Error('No se pudo identificar la categoria a actualizar.')
+  }
+
+  if (!normalizedEmpresaID) {
+    throw new Error('No se pudo identificar la tienda para actualizar la categoria.')
+  }
+
+  try {
+    const response = await apiClient.patch(
+      `/categorias/${encodeURIComponent(String(idCategoria))}/estado`,
+      { active, activo: active },
+      {
+        headers: {
+          ...(normalizedEmpresaID ? { 'X-Empresa-Id': normalizedEmpresaID } : {}),
+        },
+      },
+    )
+
+    const parsed = normalizeCategoryResponse(response.data, idCategoria)
+    if (!parsed) {
+      return {
+        idCategoria,
+        nombre: '',
+        active,
+        activo: active,
+        estado: active ? 'activo' : 'inactivo',
+      }
+    }
+
+    return {
+      ...parsed,
+      active: parsed.active ?? active,
+      activo: parsed.activo ?? active,
+      estado: parsed.estado ?? (active ? 'activo' : 'inactivo'),
+    }
+  } catch (error) {
+    throw new Error(`No se pudo actualizar el estado de la categoria. ${extractErrorMessage(error, 'Error desconocido.')}`)
+  }
+}
+
+export async function deleteCategory(idCategoria: number, empresaID?: string): Promise<void> {
+  const normalizedEmpresaID = empresaID?.trim() ?? ''
+
+  if (!Number.isFinite(idCategoria) || idCategoria <= 0) {
+    throw new Error('No se pudo identificar la categoria a eliminar.')
+  }
+
+  try {
+    await apiClient.delete(`/categorias/${encodeURIComponent(String(idCategoria))}`, {
+      headers: {
+        ...(normalizedEmpresaID ? { 'X-Empresa-Id': normalizedEmpresaID } : {}),
+      },
+    })
+  } catch (error) {
+    throw error
   }
 }

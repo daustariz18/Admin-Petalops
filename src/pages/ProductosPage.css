@@ -702,6 +702,15 @@
   border-radius: 12px;
 }
 
+.pp-category-row__actions {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  margin-left: auto;
+}
+
 .pp-input-wrap {
   position: relative;
 }
@@ -1536,6 +1545,13 @@
 
   .pp-category-row__button {
     min-height: 36px;
+  }
+
+  .pp-category-row__actions {
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    margin-left: 0;
   }
 
   .pp-inline-actions {
