@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react'
 import { buildApiUrl, hasApiBaseUrl } from '../services/apiUrl'
+import type { AuthLoginPayload } from '../auth/types'
 import './LoginPage.css'
 
 type FieldErrors = {
@@ -8,11 +9,16 @@ type FieldErrors = {
 }
 
 type LoginPageProps = {
-  onAuthenticated?: (token: string) => void
+  onAuthenticated?: (payload: AuthLoginPayload) => void
 }
 
 type LoginResponse = {
   access_token?: string
+  refresh_token?: string
+  empresa_id?: string | number
+  empresa_slug?: string
+  empresa_nombre?: string
+  logo_url?: string
   detail?: string
 }
 
@@ -140,7 +146,7 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
     try {
       let lastStatus = 0
       let lastDetail = ''
-      let token: string | undefined
+      let authPayload: AuthLoginPayload | undefined
       let resolvedSlug = slugCandidates[0] ?? ''
 
       for (const slug of slugCandidates) {
@@ -159,8 +165,14 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
         lastDetail = data.detail || ''
 
         if (response.ok && data.access_token) {
-          token = data.access_token
-          resolvedSlug = slug
+          authPayload = {
+            token: data.access_token,
+            empresaID: data.empresa_id,
+            empresaSlug: data.empresa_slug ?? slug,
+            empresaNombre: data.empresa_nombre,
+            logoUrl: data.logo_url,
+          }
+          resolvedSlug = data.empresa_slug ?? slug
           break
         }
 
@@ -174,7 +186,7 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
         }
       }
 
-      if (!token) {
+      if (!authPayload) {
         if (lastStatus === 401) {
           setErrors({
             password: 'Credenciales o slug invalidos. Verifica el correo, la contrasena y la tienda.',
@@ -194,7 +206,7 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
       setSuccess(true)
       setErrors({})
       window.setTimeout(() => {
-        onAuthenticated?.(token)
+        onAuthenticated?.(authPayload as AuthLoginPayload)
       }, 250)
     } catch {
       setSubmitError('No pudimos conectar. Intenta de nuevo.')

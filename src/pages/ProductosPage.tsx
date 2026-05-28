@@ -23,7 +23,9 @@ type ProductosPageProps = {
   empresaID: string
   tiendaNombre?: string
   storeLogoUrl?: string
+  userInitials?: string
   onLogout: () => void
+  onNavigateToBarrios: () => void
 }
 
 function formatCop(value: number): string {
@@ -45,6 +47,23 @@ function FlowerIcon({ className = '' }: { className?: string }) {
       </g>
       <circle cx="24" cy="24" r="4.8" fill="#F7A7C3" />
     </svg>
+  )
+}
+
+function getStoreInitial(name: string): string {
+  const trimmed = name.trim()
+  return trimmed ? trimmed.charAt(0).toUpperCase() : 'P'
+}
+
+function StoreFallback({ name, className = '' }: { name: string; className?: string }) {
+  return (
+    <div className={`pp-store-fallback ${className}`.trim()}>
+      <span className="pp-store-fallback__initial">{getStoreInitial(name)}</span>
+      <div className="pp-store-fallback__copy">
+        <strong>{name}</strong>
+        <span>Marca activa</span>
+      </div>
+    </div>
   )
 }
 
@@ -107,7 +126,9 @@ export default function ProductosPage({
   empresaID,
   tiendaNombre = 'Flora',
   storeLogoUrl,
+  userInitials = 'U',
   onLogout,
+  onNavigateToBarrios,
 }: ProductosPageProps) {
   const {
     products,
@@ -297,6 +318,16 @@ export default function ProductosPage({
       current.includes(label) ? current.filter((item) => item !== label) : [...current, label],
     )
   }
+
+  useEffect(() => {
+    const hasSearch = busqueda.trim().length > 0
+
+    if (!hasSearch || productGroups.length === 0) return
+
+    const visibleGroupLabels = productGroups.map((group) => group.label)
+    setIsProductsPanelOpen(true)
+    setOpenProductGroups(visibleGroupLabels)
+  }, [busqueda, productGroups])
 
   const stats = useMemo(() => {
     const total = products.length
@@ -663,35 +694,38 @@ export default function ProductosPage({
           <div className="pp-brand-row">
             <div className="pp-brand-left">
               {logoCandidates[logoIndex] ? (
-                <img
-                  src={logoCandidates[logoIndex]}
-                  alt={`Logo ${tiendaNombre}`}
-                  className="pp-store-logo"
-                  onError={() => {
-                    setLogoIndex((current) => {
-                      const next = current + 1
-                      if (next < logoCandidates.length) return next
-                      return logoCandidates.length
-                    })
-                  }}
-                />
+                <>
+                  <img
+                    src={logoCandidates[logoIndex]}
+                    alt={`Logo ${tiendaNombre}`}
+                    className="pp-store-logo"
+                    referrerPolicy="no-referrer"
+                    loading="eager"
+                    decoding="async"
+                    onError={() => {
+                      setLogoIndex((current) => {
+                        const next = current + 1
+                        if (next < logoCandidates.length) return next
+                        return logoCandidates.length
+                      })
+                    }}
+                  />
+                  <span className="pp-store-name">{tiendaNombre}</span>
+                </>
               ) : (
-                <FlowerIcon className="pp-brand-flower" />
+                <StoreFallback name={tiendaNombre} />
               )}
-              <span className="pp-brand-name">Petalops</span>
-              <span className="pp-dot">·</span>
-              <span className="pp-store">{tiendaNombre}</span>
             </div>
 
             <div className="pp-avatar-menu" ref={avatarMenuRef}>
               <button
                 type="button"
                 className="pp-avatar"
-                aria-label="Menu de usuario"
+                aria-label={`Menu de usuario ${userInitials}`}
                 aria-expanded={avatarOpen}
                 onClick={() => setAvatarOpen((current) => !current)}
               >
-                DU
+                {userInitials}
               </button>
 
               {avatarOpen ? (
@@ -706,13 +740,16 @@ export default function ProductosPage({
 
           <div className="pp-title-row">
             <div>
-              <h1>Mis productos</h1>
+              <h1>Productos</h1>
               <p>
-                {productosFiltrados.length} productos visibles · {categoriasFiltrables.length} categorias
+                {productosFiltrados.length} visibles · {categoriasFiltrables.length} categorias
               </p>
             </div>
 
             <div className="pp-title-actions">
+              <button type="button" className="pp-btn pp-btn--ghost" onClick={onNavigateToBarrios}>
+                Barrios
+              </button>
               <button type="button" className="pp-btn pp-btn--primary" onClick={() => setCurrentView('new')}>
                 + Nuevo producto
               </button>
@@ -723,31 +760,32 @@ export default function ProductosPage({
           </div>
         </header>
 
-        <section className="pp-stats-grid" aria-label="Resumen de productos">
-          <article className="pp-stat-card">
-            <p>Total productos</p>
+        <section className="pp-stats-inline" aria-label="Resumen de productos">
+          <article className="pp-stat-inline">
+            <span>Total</span>
             <strong>{stats.total}</strong>
           </article>
 
-          <article className="pp-stat-card">
-            <p>Activos</p>
+          <article className="pp-stat-inline">
+            <span>Activos</span>
             <strong className="is-success">{stats.activos}</strong>
           </article>
 
-          <article className="pp-stat-card">
-            <p>Inactivos</p>
+          <article className="pp-stat-inline">
+            <span>Inactivos</span>
             <strong className="is-muted">{stats.inactivos}</strong>
           </article>
 
-          <article className="pp-stat-card">
-            <p>Producto mas caro</p>
-            <h3 title={stats.masCaro?.nombre || ''}>{stats.masCaro?.nombre || '—'}</h3>
-            <span>{stats.masCaro ? formatCop(stats.masCaro.precio) : '—'}</span>
+          <article className="pp-stat-inline pp-stat-inline--wide">
+            <span>Mas caro</span>
+            <strong title={stats.masCaro?.nombre || ''}>{stats.masCaro?.nombre || '—'}</strong>
+            <em>{stats.masCaro ? formatCop(stats.masCaro.precio) : '—'}</em>
           </article>
         </section>
 
         <section className="pp-filters" aria-label="Filtros de productos">
           <label className="pp-input-wrap pp-input-wrap--search">
+            <span className="pp-filter-label">Producto</span>
             <svg viewBox="0 0 24 24" aria-hidden="true" className="pp-search-icon">
               <path
                 d="M11 4a7 7 0 015.4 11.5L20 19"
@@ -768,6 +806,7 @@ export default function ProductosPage({
           </label>
 
           <label className="pp-input-wrap">
+            <span className="pp-filter-label">Estado</span>
             <select value={filtroEstado} onChange={(event) => setFiltroEstado(event.target.value as FiltroEstado)}>
               <option value="todos">Todos</option>
               <option value="activo">Activo</option>
@@ -776,6 +815,7 @@ export default function ProductosPage({
           </label>
 
           <label className="pp-input-wrap">
+            <span className="pp-filter-label">Categoria</span>
             <select value={filtroCategoria} onChange={(event) => setFiltroCategoria(event.target.value)}>
               <option value="todas">Todas</option>
               {categoriasFiltrables.map((categoria) => (
@@ -787,6 +827,7 @@ export default function ProductosPage({
           </label>
 
           <label className="pp-input-wrap">
+            <span className="pp-filter-label">Precio</span>
             <select value={filtroPrecio} onChange={(event) => setFiltroPrecio(event.target.value as FiltroPrecio)}>
               <option value="todos">Todos los precios</option>
               <option value="lt200">Menos de $200.000</option>

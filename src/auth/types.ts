@@ -4,6 +4,10 @@ export interface JwtClaims {
   tenantSlug?: string
   tenant_slug?: string
   slug?: string
+  empresaNombre?: string
+  empresa_nombre?: string
+  companyName?: string
+  company_name?: string
   logoUrl?: string
   logo_url?: string
   tenantLogoUrl?: string
@@ -20,16 +24,25 @@ export interface AuthUser {
   token: string
   tenantSlug: string
   empresaID: string
+  empresaNombre?: string
   logoUrl?: string
   email?: string
   subject?: string
   exp?: number
 }
 
+export interface AuthLoginPayload {
+  token: string
+  empresaID?: string | number
+  empresaSlug?: string
+  empresaNombre?: string
+  logoUrl?: string
+}
+
 export interface AuthContextValue {
   user: AuthUser | null
   token: string | null
   isAuthenticated: boolean
-  login: (token: string) => void
+  login: (payload: AuthLoginPayload) => void
   logout: () => void
 }
