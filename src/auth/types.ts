@@ -43,6 +43,7 @@ export interface AuthContextValue {
   user: AuthUser | null
   token: string | null
   isAuthenticated: boolean
+  isInitializing: boolean
   login: (payload: AuthLoginPayload) => void
   logout: () => void
 }

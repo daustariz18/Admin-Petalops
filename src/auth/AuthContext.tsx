@@ -6,9 +6,11 @@ import {
   getStoredToken,
   setStoredAuthProfile,
   setStoredToken,
+  syncLoginTenantFromUrl,
 } from './authStorage'
 import type { AuthContextValue, AuthLoginPayload, AuthUser, JwtClaims } from './types'
 import { setUnauthorizedHandler } from '../services/apiClient'
+import { buildApiUrl, hasApiBaseUrl } from '../services/apiUrl'
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
@@ -24,7 +26,7 @@ function toStringOptional(value: string | number | undefined): string | undefine
 
 function buildUserFromAuth(token: string, profile?: Partial<AuthLoginPayload>): AuthUser {
   const claims = jwtDecode<JwtClaims>(token)
-  const tenantSlug = claims.tenantSlug ?? claims.tenant_slug ?? claims.slug
+  const tenantSlug = profile?.empresaSlug ?? claims.tenantSlug ?? claims.tenant_slug ?? claims.slug
   const empresaNombre =
     profile?.empresaNombre?.trim() ||
     claims.empresaNombre?.trim() ||
@@ -78,8 +80,48 @@ function navigateToLogin(): void {
   }
 }
 
+type AdminProductosExchangeResponse = {
+  accessToken?: string
+  access_token?: string
+  user?: {
+    empresaID?: string | number
+    empresaSlug?: string
+    empresaNombre?: string
+    logoUrl?: string
+  }
+  empresa_id?: string | number
+  empresa_slug?: string
+  empresa_nombre?: string
+  logo_url?: string
+}
+
+async function exchangeAdminProductosSession(): Promise<AuthLoginPayload | null> {
+  if (!hasApiBaseUrl()) return null
+
+  const response = await fetch(buildApiUrl('/auth/admin-productos/exchange'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  })
+
+  if (!response.ok) return null
+
+  const data = (await response.json().catch(() => ({}))) as AdminProductosExchangeResponse
+  const token = data.accessToken || data.access_token
+  if (!token) return null
+
+  return {
+    token,
+    empresaID: data.user?.empresaID ?? data.empresa_id,
+    empresaSlug: data.user?.empresaSlug ?? data.empresa_slug,
+    empresaNombre: data.user?.empresaNombre ?? data.empresa_nombre,
+    logoUrl: data.user?.logoUrl ?? data.logo_url,
+  }
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null)
+  const [initializing, setInitializing] = useState(true)
 
   const logout = useCallback(() => {
     clearStoredToken()
@@ -96,26 +138,48 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [])
 
   useEffect(() => {
-    const token = getStoredToken()
-    const storedProfile = getStoredAuthProfile()
+    const bootstrapAuth = async () => {
+      syncLoginTenantFromUrl()
 
-    if (!token) {
-      navigateToLogin()
-      return
-    }
+      const token = getStoredToken()
+      const storedProfile = getStoredAuthProfile()
 
-    try {
-      const parsedProfile = storedProfile ? (JSON.parse(storedProfile) as Partial<AuthLoginPayload>) : undefined
-      const persistedUser = buildUserFromAuth(token, parsedProfile)
-      setUser(persistedUser)
+      if (token) {
+        try {
+          const parsedProfile = storedProfile ? (JSON.parse(storedProfile) as Partial<AuthLoginPayload>) : undefined
+          const persistedUser = buildUserFromAuth(token, parsedProfile)
+          setUser(persistedUser)
 
-      if (window.location.pathname === '/login') {
-        navigateToTenantDashboard(persistedUser.tenantSlug)
+          if (window.location.pathname === '/login') {
+            navigateToTenantDashboard(persistedUser.tenantSlug)
+          }
+          setInitializing(false)
+          return
+        } catch {
+          clearStoredToken()
+        }
       }
-    } catch {
-      clearStoredToken()
+
+      try {
+        const exchangedPayload = await exchangeAdminProductosSession()
+        if (exchangedPayload) {
+          const exchangedUser = buildUserFromAuth(exchangedPayload.token, exchangedPayload)
+          setStoredToken(exchangedPayload.token)
+          setStoredAuthProfile(JSON.stringify(exchangedUser))
+          setUser(exchangedUser)
+          navigateToTenantDashboard(exchangedUser.tenantSlug)
+          setInitializing(false)
+          return
+        }
+      } catch {
+        clearStoredToken()
+      }
+
+      setInitializing(false)
       navigateToLogin()
     }
+
+    void bootstrapAuth()
   }, [])
 
   useEffect(() => {
@@ -133,10 +197,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
       user,
       token: user?.token ?? null,
       isAuthenticated: user !== null,
+      isInitializing: initializing,
       login,
       logout,
     }),
-    [user, login, logout],
+    [user, initializing, login, logout],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

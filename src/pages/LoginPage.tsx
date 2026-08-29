@@ -4,7 +4,7 @@ import type { AuthLoginPayload } from '../auth/types'
 import './LoginPage.css'
 
 type FieldErrors = {
-  email?: string
+  username?: string
   password?: string
 }
 
@@ -22,8 +22,6 @@ type LoginResponse = {
   detail?: string
 }
 
-const EMAIL_REGEX = /\S+@\S+\.\S+/
-
 const PETALOPS_LOGO_CANDIDATES = [
   'https://ddy2osi8uorg4.cloudfront.net/tenants/petalops/logos/PetalOps+Logo.png',
   'https://ddy2osi8uorg4.cloudfront.net/tenants/petalops/logos/PetalOps%20Logo.png',
@@ -31,21 +29,23 @@ const PETALOPS_LOGO_CANDIDATES = [
   '/petalops-logo.svg',
 ]
 
-function inferTenantSlugFromEmail(email: string): string {
-  try {
-    const domain = email.trim().toLowerCase().split('@')[1]
-    if (!domain) return ''
-    return domain.split('.')[0] ?? ''
-  } catch {
-    return ''
+function inferTenantSlugFromLogin(value: string): string {
+  const cleaned = value.trim().toLowerCase()
+  if (!cleaned) return ''
+
+  if (cleaned.includes('@')) {
+    const domain = cleaned.split('@')[1]
+    return domain?.split('.')[0] ?? ''
   }
+
+  return cleaned.split(/[._-]/)[0] ?? ''
 }
 
-function getSlugCandidates(email: string): string[] {
+function getSlugCandidates(login: string): string[] {
   const storedSlug = localStorage.getItem('slug')?.trim().toLowerCase() ?? ''
-  const emailSlug = inferTenantSlugFromEmail(email).trim().toLowerCase()
+  const inferredSlug = inferTenantSlugFromLogin(login)
 
-  return Array.from(new Set([storedSlug, emailSlug].filter(Boolean)))
+  return Array.from(new Set([storedSlug, inferredSlug].filter(Boolean)))
 }
 
 function EyeIcon({ open }: { open: boolean }) {
@@ -97,7 +97,7 @@ function FlowerIcon() {
 }
 
 export default function LoginPage({ onAuthenticated }: LoginPageProps) {
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [errors, setErrors] = useState<FieldErrors>({})
@@ -106,7 +106,7 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
   const [submitError, setSubmitError] = useState('')
   const [logoIndex, setLogoIndex] = useState(0)
 
-  const hasEmailError = Boolean(errors.email)
+  const hasUsernameError = Boolean(errors.username)
   const hasPasswordError = Boolean(errors.password)
   const logoSrc = PETALOPS_LOGO_CANDIDATES[logoIndex]
 
@@ -123,17 +123,17 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
 
     const nextErrors: FieldErrors = {}
 
-    if (!EMAIL_REGEX.test(email.trim())) {
-      nextErrors.email = 'Ingresa un correo valido'
+    if (!username.trim()) {
+      nextErrors.username = 'Ingresa tu usuario o correo electronico'
     }
 
     if (!password.trim()) {
-      nextErrors.password = 'Correo o contrasena incorrectos'
+      nextErrors.password = 'Usuario, correo o contrasena incorrectos'
     }
 
-    const slugCandidates = getSlugCandidates(email)
+    const slugCandidates = getSlugCandidates(username)
     if (slugCandidates.length === 0) {
-      nextErrors.email = 'Ingresa un correo valido'
+      nextErrors.username = 'No encontramos la tienda. Ingresa desde el enlace de tu floristeria.'
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -150,17 +150,33 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
       let resolvedSlug = slugCandidates[0] ?? ''
 
       for (const slug of slugCandidates) {
-        const response = await fetch(buildApiUrl('/auth/login'), {
+        const loginBody = {
+          email: username.trim(),
+          password,
+          slug,
+        }
+
+        let response = await fetch(buildApiUrl('/auth/login'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: email.trim(),
-            password,
-            slug,
-          }),
+          body: JSON.stringify(loginBody),
         })
 
-        const data = (await response.json().catch(() => ({}))) as LoginResponse
+        let data = (await response.json().catch(() => ({}))) as LoginResponse
+
+        if (response.status === 422) {
+          response = await fetch(buildApiUrl('/auth/login'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: username.trim(),
+              password,
+              slug,
+            }),
+          })
+          data = (await response.json().catch(() => ({}))) as LoginResponse
+        }
+
         lastStatus = response.status
         lastDetail = data.detail || ''
 
@@ -189,7 +205,7 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
       if (!authPayload) {
         if (lastStatus === 401) {
           setErrors({
-            password: 'Credenciales o slug invalidos. Verifica el correo, la contrasena y la tienda.',
+            password: 'Credenciales o slug invalidos. Verifica el usuario, correo, contrasena y tienda.',
           })
         } else if (lastStatus === 404) {
           setSubmitError(
@@ -250,23 +266,23 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
 
         <form className="login-page__form" onSubmit={(event) => void handleSubmit(event)} noValidate>
           <div className="login-page__field-group">
-            <label htmlFor="email" className="login-page__label">
-              Correo electronico
+            <label htmlFor="username" className="login-page__label">
+              Usuario o correo electronico
             </label>
             <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              className={`login-page__input ${hasEmailError ? 'is-error' : ''}`}
-              placeholder="tu@floristeria.com"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              id="username"
+              type="text"
+              autoComplete="username"
+              className={`login-page__input ${hasUsernameError ? 'is-error' : ''}`}
+              placeholder="usuario o tu@floristeria.com"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
               disabled={loading}
-              aria-invalid={hasEmailError}
-              aria-describedby={hasEmailError ? 'login-email-error' : undefined}
+              aria-invalid={hasUsernameError}
+              aria-describedby={hasUsernameError ? 'login-username-error' : undefined}
             />
-            <p id="login-email-error" className={`login-page__error ${hasEmailError ? 'is-visible' : ''}`}>
-              {errors.email || 'Ingresa un correo valido'}
+            <p id="login-username-error" className={`login-page__error ${hasUsernameError ? 'is-visible' : ''}`}>
+              {errors.username || 'Ingresa tu usuario o correo electronico'}
             </p>
           </div>
 
@@ -298,7 +314,7 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
               </button>
             </div>
             <p id="login-password-error" className={`login-page__error ${hasPasswordError ? 'is-visible' : ''}`}>
-              {errors.password || 'Correo o contrasena incorrectos'}
+              {errors.password || 'Usuario, correo o contrasena incorrectos'}
             </p>
           </div>
 

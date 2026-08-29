@@ -150,6 +150,8 @@ export default function ProductosPage({
     toggleCategoriaStatus,
     deleteCategoria,
     deletingCategoria,
+    orderingCategorias,
+    reorderCategorias,
   } = useCategorias(empresaID)
 
   const [currentView, setCurrentView] = useState<'list' | 'new'>('list')
@@ -161,7 +163,7 @@ export default function ProductosPage({
   const [modalEditar, setModalEditar] = useState<ProductItem | null>(null)
   const [editNombre, setEditNombre] = useState('')
   const [editPrecio, setEditPrecio] = useState('')
-  const [editCodigoProducto, setEditCodigoProducto] = useState('')
+  const [editCodigoCatalogo, setEditCodigoCatalogo] = useState('')
   const [editImageS3Key, setEditImageS3Key] = useState('')
   const [editCategoriaId, setEditCategoriaId] = useState('')
   const [editDescripcion, setEditDescripcion] = useState('')
@@ -249,19 +251,37 @@ export default function ProductosPage({
     return categoria.estado === 'inactivo' ? 'inactivo' : 'activo'
   }
 
+  const orderedCategorias = useMemo(() => {
+    return [...categorias].sort((a, b) => {
+      const orderA = Number.isFinite(a.orden_catalogo) ? Number(a.orden_catalogo) : Number.MAX_SAFE_INTEGER
+      const orderB = Number.isFinite(b.orden_catalogo) ? Number(b.orden_catalogo) : Number.MAX_SAFE_INTEGER
+
+      if (orderA !== orderB) return orderA - orderB
+      return a.nombre.localeCompare(b.nombre, 'es')
+    })
+  }, [categorias])
+
+  const categoryOrderIndex = useMemo(() => {
+    return new Map(orderedCategorias.map((categoria, index) => [categoria.nombre.trim().toLowerCase(), index]))
+  }, [orderedCategorias])
+
   const categoriasFiltrables = useMemo(() => {
     const unique = Array.from(new Set(products.map((producto) => getCategoriaLabel(producto))))
-    return unique.sort((a, b) => a.localeCompare(b, 'es'))
-  }, [products, categorias])
+    return unique.sort((a, b) => {
+      const orderA = categoryOrderIndex.get(a.trim().toLowerCase()) ?? Number.MAX_SAFE_INTEGER
+      const orderB = categoryOrderIndex.get(b.trim().toLowerCase()) ?? Number.MAX_SAFE_INTEGER
+
+      if (orderA !== orderB) return orderA - orderB
+      return a.localeCompare(b, 'es')
+    })
+  }, [products, categorias, categoryOrderIndex])
 
   const categoriasEditables = useMemo(() => {
     const term = categorySearch.trim().toLowerCase()
-    return [...categorias]
-      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))
-      .filter((categoria) =>
-        term ? `${categoria.nombre} ${categoria.idCategoria}`.toLowerCase().includes(term) : true,
-      )
-  }, [categorias, categorySearch])
+    return orderedCategorias.filter((categoria) =>
+      term ? `${categoria.nombre} ${categoria.idCategoria}`.toLowerCase().includes(term) : true,
+    )
+  }, [orderedCategorias, categorySearch])
 
   const productosFiltrados = useMemo(() => {
     const term = busqueda.trim().toLowerCase()
@@ -310,8 +330,14 @@ export default function ProductosPage({
         label,
         products: groupedProducts,
       }))
-      .sort((a, b) => a.label.localeCompare(b.label, 'es'))
-  }, [productosFiltrados, categorias])
+      .sort((a, b) => {
+        const orderA = categoryOrderIndex.get(a.label.trim().toLowerCase()) ?? Number.MAX_SAFE_INTEGER
+        const orderB = categoryOrderIndex.get(b.label.trim().toLowerCase()) ?? Number.MAX_SAFE_INTEGER
+
+        if (orderA !== orderB) return orderA - orderB
+        return a.label.localeCompare(b.label, 'es')
+      })
+  }, [productosFiltrados, categorias, categoryOrderIndex])
 
   const toggleProductGroup = (label: string) => {
     setOpenProductGroups((current) =>
@@ -394,11 +420,16 @@ export default function ProductosPage({
     setModalEditar(producto)
     setEditNombre(producto.nombre)
     setEditPrecio(String(producto.precio))
-    setEditCodigoProducto(producto.codigo_producto ?? '')
+    setEditCodigoCatalogo(producto.codigo_catalogo ?? '')
     setEditImageS3Key(producto.image_s3_key ?? '')
+    const categoriaByName = categorias.find(
+      (categoria) =>
+        producto.categoria?.trim().toLowerCase() === categoria.nombre.trim().toLowerCase(),
+    )
     const currentCategoriaId =
       (typeof producto.categoriaID === 'number' ? producto.categoriaID : undefined) ??
-      (producto.categoria && /^\d+$/.test(producto.categoria) ? Number(producto.categoria) : undefined)
+      (producto.categoria && /^\d+$/.test(producto.categoria) ? Number(producto.categoria) : undefined) ??
+      categoriaByName?.idCategoria
     setEditCategoriaId(currentCategoriaId && Number.isFinite(currentCategoriaId) ? String(currentCategoriaId) : '')
     setEditDescripcion(producto.descripcion ?? '')
     setEditError('')
@@ -511,6 +542,28 @@ export default function ProductosPage({
     }
   }
 
+  const handleMoveCategoria = async (categoria: Categoria, direction: -1 | 1) => {
+    const currentIndex = orderedCategorias.findIndex((item) => item.idCategoria === categoria.idCategoria)
+    const nextIndex = currentIndex + direction
+
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= orderedCategorias.length) return
+
+    const next = [...orderedCategorias]
+    const [moved] = next.splice(currentIndex, 1)
+    next.splice(nextIndex, 0, moved)
+
+    try {
+      await reorderCategorias(next.map((item) => item.idCategoria))
+      showToast('Orden de categorias actualizado.', 'success')
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : 'No se pudo guardar el orden de las categorias.'
+      showToast(message, 'error')
+    }
+  }
+
   const handleDeleteCategoria = async () => {
     if (!categoryDeleteTarget) return
 
@@ -587,7 +640,7 @@ export default function ProductosPage({
       return
     }
 
-    const codigoProducto = editCodigoProducto.trim()
+    const codigoCatalogo = editCodigoCatalogo.trim()
     const categoriaParaEnviar = categoriaSeleccionada?.nombre ?? getCategoriaLabel(modalEditar)
 
     setIsSavingEdit(true)
@@ -595,7 +648,7 @@ export default function ProductosPage({
 
     const ok = await updateProduct(modalEditar.id, {
       nombre,
-      codigo_producto: codigoProducto || undefined,
+      codigo_catalogo: codigoCatalogo || undefined,
       precio,
       categoriaID: categoriaId,
       categoria: categoriaParaEnviar,
@@ -902,7 +955,9 @@ export default function ProductosPage({
                   />
                 </label>
                 <p className="pp-category-panel__toolbar-note">
-                  Busca una categoria por nombre o por ID para encontrarla mas rapido.
+                  {categorySearch.trim()
+                    ? 'Limpia la busqueda para cambiar el orden del catalogo.'
+                    : 'Usa las flechas para definir como apareceran las categorias en el catalogo.'}
                 </p>
               </div>
 
@@ -916,7 +971,51 @@ export default function ProductosPage({
                 <div className="pp-category-panel__list">
                   {categoriasEditables.map((categoria, index) => (
                     <article key={categoria.idCategoria} className="pp-category-row">
-                      <div className="pp-category-row__index">{String(index + 1).padStart(2, '0')}</div>
+                      <div className="pp-category-row__order">
+                        <div className="pp-category-row__index">{String(index + 1).padStart(2, '0')}</div>
+                        <div className="pp-category-row__order-actions" aria-label={`Ordenar ${categoria.nombre}`}>
+                          <button
+                            type="button"
+                            className="pp-order-btn"
+                            aria-label={`Subir ${categoria.nombre}`}
+                            onClick={() => void handleMoveCategoria(categoria, -1)}
+                            disabled={orderingCategorias || Boolean(categorySearch.trim()) || index === 0}
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <path
+                                d="M7 14l5-5 5 5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            className="pp-order-btn"
+                            aria-label={`Bajar ${categoria.nombre}`}
+                            onClick={() => void handleMoveCategoria(categoria, 1)}
+                            disabled={
+                              orderingCategorias ||
+                              Boolean(categorySearch.trim()) ||
+                              index === categoriasEditables.length - 1
+                            }
+                          >
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <path
+                                d="M7 10l5 5 5-5"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
                       <div className="pp-category-row__copy">
                         <div className="pp-category-row__title">
                           <strong>{categoria.nombre}</strong>
@@ -1105,32 +1204,35 @@ export default function ProductosPage({
                         <div className="pp-product-group__body-inner">
                           <section className="pp-products-grid" aria-label={`Productos de ${group.label}`}>
                             {isOpen
-                              ? group.products.map((producto) => (
-                                  <article
-                                    key={producto.id}
-                                    className="pp-product-card pp-product-card--catalog"
-                                  >
-                                    <div className="pp-product-media">
-                                      <ProductImage src={producto.image_url} alt={producto.nombre} />
-                                      <div className="pp-product-media__overlay">
-                                        <span
-                                          className={`pp-status-badge ${
-                                            producto.estado === 'activo' ? 'is-active' : 'is-inactive'
-                                          }`}
-                                        >
-                                          {producto.estado === 'activo' ? 'Activo' : 'Inactivo'}
-                                        </span>
+                              ? group.products.map((producto) => {
+                                  const codigoCatalogo = producto.codigo_catalogo
+
+                                  return (
+                                    <article
+                                      key={producto.id}
+                                      className="pp-product-card pp-product-card--catalog"
+                                    >
+                                      <div className="pp-product-media">
+                                        <ProductImage src={producto.image_url} alt={producto.nombre} />
+                                        <div className="pp-product-media__overlay">
+                                          <span
+                                            className={`pp-status-badge ${
+                                              producto.estado === 'activo' ? 'is-active' : 'is-inactive'
+                                            }`}
+                                          >
+                                            {producto.estado === 'activo' ? 'Activo' : 'Inactivo'}
+                                          </span>
+                                        </div>
                                       </div>
-                                    </div>
 
-                                    <div className="pp-product-info">
-                                      {producto.codigo_producto ? (
-                                        <span className="pp-code-badge">{producto.codigo_producto}</span>
-                                      ) : null}
+                                      <div className="pp-product-info">
+                                        {codigoCatalogo ? (
+                                          <span className="pp-code-badge">Catálogo: {codigoCatalogo}</span>
+                                        ) : null}
 
-                                      <h3 className="pp-product-title" title={producto.nombre}>
-                                        {producto.nombre}
-                                      </h3>
+                                        <h3 className="pp-product-title" title={producto.nombre}>
+                                          {producto.nombre}
+                                        </h3>
                                       <div className="pp-product-meta">
                                         <p className="pp-product-price">{formatCop(producto.precio)}</p>
                                         <span className="pp-category-tag">{getCategoriaLabel(producto)}</span>
@@ -1176,7 +1278,8 @@ export default function ProductosPage({
                                       </div>
                                     </div>
                                   </article>
-                                ))
+                                  )
+                                })
                               : null}
                           </section>
                         </div>
@@ -1317,13 +1420,13 @@ export default function ProductosPage({
             </label>
 
             <label className="pp-form-field">
-              <span>Código del producto</span>
+              <span>Código del catálogo</span>
               <input
                 type="text"
-                value={editCodigoProducto}
-                onChange={(event) => setEditCodigoProducto(event.target.value)}
+                value={editCodigoCatalogo}
+                onChange={(event) => setEditCodigoCatalogo(event.target.value)}
                 disabled={isSavingEdit}
-                placeholder="Ej: PROD-001"
+                placeholder="Ej: CAT-001"
               />
             </label>
 

@@ -7,6 +7,7 @@ import {
   type CategoryStatus,
   deleteCategory as deleteCategoryRequest,
   updateCategory as updateCategoryRequest,
+  updateCategoryOrder as updateCategoryOrderRequest,
   updateCategoryStatus as updateCategoryStatusRequest,
 } from '../services/categoryService'
 
@@ -16,6 +17,7 @@ export type Categoria = {
   active?: boolean
   activo?: boolean
   estado?: CategoryStatus
+  orden_catalogo?: number
 }
 
 type CategoryCacheEntry = {
@@ -51,6 +53,10 @@ function parseCategoria(value: unknown): Categoria | null {
     activo?: unknown
     estado?: unknown
     status?: unknown
+    orden_catalogo?: unknown
+    ordenCatalogo?: unknown
+    orden?: unknown
+    position?: unknown
   }
 
   const rawId =
@@ -80,12 +86,20 @@ function parseCategoria(value: unknown): Categoria | null {
         : estado
           ? estado === 'activo'
           : undefined
+  const ordenCatalogo = Number(source.orden_catalogo ?? source.ordenCatalogo ?? source.orden ?? source.position)
 
   if (!Number.isFinite(idCategoria) || idCategoria <= 0 || !nombre) {
     return null
   }
 
-  return { idCategoria, nombre, active, activo: active, estado }
+  return {
+    idCategoria,
+    nombre,
+    active,
+    activo: active,
+    estado,
+    orden_catalogo: Number.isFinite(ordenCatalogo) ? ordenCatalogo : undefined,
+  }
 }
 
 function parseCreatedCategoriaResponse(payload: unknown): Categoria | null {
@@ -130,6 +144,7 @@ function mergeCategoriaState(base: Categoria | undefined, next: Partial<Category
     active,
     activo: typeof active === 'boolean' ? active : undefined,
     estado,
+    orden_catalogo: next.orden_catalogo ?? base?.orden_catalogo,
   }
 }
 
@@ -204,6 +219,7 @@ export function useCategorias(empresaID?: string) {
   const [creatingCategoria, setCreatingCategoria] = useState(false)
   const [updatingCategoria, setUpdatingCategoria] = useState(false)
   const [deletingCategoria, setDeletingCategoria] = useState(false)
+  const [orderingCategorias, setOrderingCategorias] = useState(false)
 
   useEffect(() => {
     const loadCategorias = async () => {
@@ -349,7 +365,13 @@ export function useCategorias(empresaID?: string) {
           if (prev.some((item) => item.idCategoria === parsed.idCategoria)) {
             return prev
           }
-          const next = [...prev, parsed]
+          const next = [
+            ...prev,
+            {
+              ...parsed,
+              orden_catalogo: parsed.orden_catalogo ?? prev.length + 1,
+            },
+          ]
           storeCategoriasCache(normalizedEmpresaID, next)
           return next
         })
@@ -476,6 +498,60 @@ export function useCategorias(empresaID?: string) {
     [empresaID],
   )
 
+  const reorderCategorias = useCallback(
+    async (orderedIds: number[]): Promise<void> => {
+      const normalizedEmpresaID = empresaID?.trim() ?? ''
+
+      if (!normalizedEmpresaID) {
+        throw new Error('No se pudo identificar la tienda para ordenar las categorias.')
+      }
+
+      const uniqueIds = Array.from(new Set(orderedIds))
+      const previousCategorias = categorias
+      const orderedSet = new Set(uniqueIds)
+      const movable = uniqueIds
+        .map((idCategoria) => categorias.find((categoria) => categoria.idCategoria === idCategoria))
+        .filter((categoria): categoria is Categoria => Boolean(categoria))
+        .map((categoria, index) => ({
+          ...categoria,
+          orden_catalogo: index + 1,
+        }))
+      const remaining = categorias
+        .filter((categoria) => !orderedSet.has(categoria.idCategoria))
+        .map((categoria, index) => ({
+          ...categoria,
+          orden_catalogo: movable.length + index + 1,
+        }))
+      const nextCategorias = [...movable, ...remaining]
+
+      setOrderingCategorias(true)
+      setCategorias(nextCategorias)
+      storeCategoriasCache(normalizedEmpresaID, nextCategorias)
+
+      try {
+        await updateCategoryOrderRequest(
+          nextCategorias.map((categoria, index) => ({
+            idCategoria: categoria.idCategoria,
+            orden_catalogo: categoria.orden_catalogo ?? index + 1,
+          })),
+          normalizedEmpresaID,
+        )
+        setCategoriasError('')
+      } catch (error) {
+        setCategorias(previousCategorias)
+        storeCategoriasCache(normalizedEmpresaID, previousCategorias)
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message
+            : 'No se pudo guardar el orden de las categorias.'
+        throw new Error(message)
+      } finally {
+        setOrderingCategorias(false)
+      }
+    },
+    [empresaID, categorias],
+  )
+
   return {
     categorias,
     categoriasLoading,
@@ -483,9 +559,11 @@ export function useCategorias(empresaID?: string) {
     creatingCategoria,
     updatingCategoria,
     deletingCategoria,
+    orderingCategorias,
     createCategoria,
     updateCategoria,
     toggleCategoriaStatus,
     deleteCategoria,
+    reorderCategorias,
   }
 }

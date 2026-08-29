@@ -10,6 +10,7 @@ export type ProductItem = {
   id: string
   backend_id?: number
   codigo_producto?: string
+  codigo_catalogo?: string
   image_s3_key?: string
   image_url: string
   nombre: string
@@ -265,6 +266,7 @@ function normalizeProduct(raw: unknown): ProductItem | null {
     id,
     backend_id: Number.isFinite(backendID) && backendID > 0 ? backendID : undefined,
     codigo_producto: toStringOrEmpty(item.codigo_producto ?? item.codigoProducto ?? item.codigo),
+    codigo_catalogo: toStringOrEmpty(item.codigo_catalogo ?? item.codigoCatalogo ?? item.catalogo_codigo),
     image_s3_key: toStringOrEmpty(item.imagen_s3_key ?? item.imagenS3Key ?? item.image_s3_key ?? item.imageS3Key),
     image_url: imageUrl,
     nombre,
@@ -313,6 +315,55 @@ function buildStatusEndpoints(productId: string, empresaID: string): string[] {
 function buildUpdateEndpoints(productId: string, empresaID: string): string[] {
   const query = `empresa_id=${encodeURIComponent(empresaID)}`
   return [`${buildProductsEndpoint(productId)}?${query}`, buildProductsEndpoint(productId)]
+}
+
+function buildUpdatePayloadVariants(
+  basePayload: Record<string, unknown>,
+  patch: Partial<Omit<ProductItem, 'id'>>,
+): Record<string, unknown>[] {
+  const categoriaID = typeof patch.categoriaID === 'number' ? patch.categoriaID : undefined
+  const categoriaNombre = typeof patch.categoria === 'string' ? patch.categoria.trim() : ''
+
+  if (!categoriaID) {
+    return [basePayload]
+  }
+
+  const categoryVariants: Record<string, unknown>[] = [
+    { categoriaID },
+    { categoria_id: categoriaID },
+    { category_id: categoriaID },
+    { categoriaId: categoriaID },
+    { categoryId: categoriaID },
+    { categoria: categoriaID },
+  ]
+
+  if (categoriaNombre) {
+    categoryVariants.push({ categoria: categoriaNombre })
+  }
+
+  return categoryVariants.map((categoryPayload) => ({
+    ...basePayload,
+    ...categoryPayload,
+  }))
+}
+
+function productHasCategoria(product: ProductItem | undefined, categoriaID: number, categoriaNombre?: string): boolean {
+  if (!product) return false
+
+  if (product.categoriaID === categoriaID) {
+    return true
+  }
+
+  const rawCategoria = product.categoria?.trim()
+  if (rawCategoria && /^\d+$/.test(rawCategoria) && Number(rawCategoria) === categoriaID) {
+    return true
+  }
+
+  return Boolean(
+    categoriaNombre &&
+      rawCategoria &&
+      rawCategoria.toLowerCase() === categoriaNombre.trim().toLowerCase(),
+  )
 }
 
 function buildDeleteEndpoints(productId: string, empresaID: string): string[] {
@@ -437,42 +488,42 @@ export function useProducts(empresaID: string): UseProductsReturn {
       const backendProduct = productosBackend.find((product) => product.id === id)
       if (!backendProduct) return false
 
-      const payload: Record<string, unknown> = {}
-      if (typeof patch.nombre === 'string') payload.nombre = patch.nombre
-      if (typeof patch.codigo_producto === 'string') {
-        payload.codigo_producto = patch.codigo_producto
-        payload.codigoProducto = patch.codigo_producto
-        payload.codigo = patch.codigo_producto
+      const basePayload: Record<string, unknown> = {}
+      if (typeof patch.nombre === 'string') basePayload.nombre = patch.nombre
+      if (typeof patch.codigo_catalogo === 'string') {
+        // Solo actualizamos el código de catálogo, no el código interno de producto.
+        basePayload.codigo_catalogo = patch.codigo_catalogo
       }
-      if (typeof patch.precio === 'number') payload.precio = patch.precio
-      if (typeof patch.categoria === 'string') payload.categoria = patch.categoria
-      if (typeof patch.categoriaID === 'number') {
-        payload.categoriaID = patch.categoriaID
-        payload.categoria_id = patch.categoriaID
-      }
-      if (typeof patch.descripcion === 'string') payload.descripcion = patch.descripcion
+      if (typeof patch.precio === 'number') basePayload.precio = patch.precio
+      if (typeof patch.descripcion === 'string') basePayload.descripcion = patch.descripcion
 
-      if (Object.keys(payload).length === 0) {
+      const hasCategoryPatch = typeof patch.categoriaID === 'number' || typeof patch.categoria === 'string'
+      const payloads = buildUpdatePayloadVariants(basePayload, patch)
+
+      if (Object.keys(basePayload).length === 0 && !hasCategoryPatch) {
         return true
       }
 
       const endpoints = buildUpdateEndpoints(id, empresaID)
-      const methods: Array<'patch' | 'put'> = ['patch', 'put']
 
       try {
         for (const endpoint of endpoints) {
-          for (const method of methods) {
+          for (const payload of payloads) {
             try {
-              await apiClient.request({
-                url: endpoint,
-                method,
-                data: payload,
-              })
-              await loadProducts(true)
+              await apiClient.patch(endpoint, payload)
+              const reloaded = await loadProducts(true)
+
+              if (typeof patch.categoriaID === 'number') {
+                const updatedProduct = reloaded.find((product) => product.id === id)
+                if (!productHasCategoria(updatedProduct, patch.categoriaID, patch.categoria)) {
+                  continue
+                }
+              }
+
               return true
             } catch (error: unknown) {
               const status = (error as { response?: { status?: number } })?.response?.status
-              if (status === 404 || status === 405 || status === 422 || status === 400) {
+              if (status === 404 || status === 422 || status === 400) {
                 continue
               }
               throw error

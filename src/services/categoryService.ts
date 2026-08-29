@@ -12,6 +12,10 @@ export type CategoryApiResponse = {
   activo?: unknown
   estado?: unknown
   status?: unknown
+  orden_catalogo?: unknown
+  ordenCatalogo?: unknown
+  orden?: unknown
+  position?: unknown
 }
 
 export type CategoryStatus = 'activo' | 'inactivo'
@@ -22,6 +26,7 @@ export type CategoryResult = {
   active?: boolean
   activo?: boolean
   estado?: CategoryStatus
+  orden_catalogo?: number
 }
 
 function toStringOrEmpty(value: unknown): string {
@@ -83,12 +88,22 @@ function normalizeCategoryResponse(payload: unknown, fallbackId: number): Catego
           ? estado === 'activo'
           : undefined
   const activo = typeof merged.activo === 'boolean' ? merged.activo : active
+  const ordenCatalogo = Number(
+    merged.orden_catalogo ?? merged.ordenCatalogo ?? merged.orden ?? merged.position,
+  )
 
   if (!Number.isFinite(idCategoria) || idCategoria <= 0 || !nombre) {
     return null
   }
 
-  return { idCategoria, nombre, active, activo, estado }
+  return {
+    idCategoria,
+    nombre,
+    active,
+    activo,
+    estado,
+    orden_catalogo: Number.isFinite(ordenCatalogo) ? ordenCatalogo : undefined,
+  }
 }
 
 function extractErrorMessage(error: unknown, fallback: string): string {
@@ -209,6 +224,63 @@ export async function updateCategoryStatus(
   } catch (error) {
     throw new Error(`No se pudo actualizar el estado de la categoria. ${extractErrorMessage(error, 'Error desconocido.')}`)
   }
+}
+
+export async function updateCategoryOrder(
+  categorias: Array<{ idCategoria: number; orden_catalogo: number }>,
+  empresaID?: string,
+): Promise<void> {
+  const normalizedEmpresaID = empresaID?.trim() ?? ''
+  const ordered = categorias.filter(
+    (categoria) =>
+      Number.isFinite(categoria.idCategoria) &&
+      categoria.idCategoria > 0 &&
+      Number.isFinite(categoria.orden_catalogo),
+  )
+
+  if (!normalizedEmpresaID) {
+    throw new Error('No se pudo identificar la tienda para ordenar las categorias.')
+  }
+
+  if (ordered.length === 0) {
+    throw new Error('No hay categorias validas para ordenar.')
+  }
+
+  const headers = {
+    'X-Empresa-Id': normalizedEmpresaID,
+  }
+  const query = `empresa_id=${encodeURIComponent(normalizedEmpresaID)}`
+  const endpoints = [
+    `/categorias/orden?${query}`,
+    `/categorias/reordenar?${query}`,
+    `/categorias/order?${query}`,
+  ]
+  const payload = {
+    empresaID: normalizedEmpresaID,
+    empresa_id: normalizedEmpresaID,
+    categorias: ordered,
+    orden: ordered.map((categoria) => ({
+      idCategoria: categoria.idCategoria,
+      id_categoria: categoria.idCategoria,
+      orden_catalogo: categoria.orden_catalogo,
+      orden: categoria.orden_catalogo,
+    })),
+  }
+
+  for (const endpoint of endpoints) {
+    try {
+      await apiClient.patch(endpoint, payload, { headers })
+      return
+    } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } })?.response?.status
+      if (status === 404 || status === 405 || status === 422 || status === 400) {
+        continue
+      }
+      throw error
+    }
+  }
+
+  throw new Error('El backend aun no tiene un endpoint compatible para ordenar categorias.')
 }
 
 export async function deleteCategory(idCategoria: number, empresaID?: string): Promise<void> {
