@@ -335,7 +335,7 @@ export default function BarriosPage({
     const zona = form.zona_id.trim() === '' ? null : Number(form.zona_id)
 
     if (!nombre) {
-      setFormError('El nombre del barrio es obligatorio.')
+      setFormError('El barrio o municipio es obligatorio.')
       return
     }
 
@@ -365,7 +365,7 @@ export default function BarriosPage({
     })
 
     if (duplicated) {
-      setFormError('Ya existe un barrio con ese nombre en la misma sucursal.')
+      setFormError('Ya existe una zona con ese barrio o municipio en la misma sucursal.')
       return
     }
 
@@ -380,7 +380,7 @@ export default function BarriosPage({
           zona_id: zona,
           activo: form.activo,
         })
-        showToast('Barrio actualizado con exito.', 'success')
+        showToast('Zona de entrega actualizada con exito.', 'success')
       } else {
         await createBarrio({
           sucursal_id: sucursal,
@@ -389,13 +389,13 @@ export default function BarriosPage({
           zona_id: zona,
           activo: form.activo,
         })
-        showToast('Barrio creado con exito.', 'success')
+        showToast('Zona de entrega creada con exito.', 'success')
       }
 
       setDrawerOpen(false)
       setEditingBarrio(null)
     } catch (error) {
-      const message = error instanceof Error && error.message.trim() ? error.message : 'No se pudo guardar el barrio.'
+      const message = error instanceof Error && error.message.trim() ? error.message : 'No se pudo guardar la zona.'
       setFormError(message)
       showToast(message, 'error')
     }
@@ -404,7 +404,7 @@ export default function BarriosPage({
   const handleToggleStatus = async (barrio: Barrio) => {
     try {
       await toggleBarrioStatus(barrio.id_barrio, barrio.activo === 0)
-      showToast(`Barrio marcado como ${barrio.activo === 1 ? 'inactivo' : 'activo'}.`, 'info')
+      showToast(`Zona marcada como ${barrio.activo === 1 ? 'inactiva' : 'activa'}.`, 'info')
     } catch (error) {
       const message = error instanceof Error && error.message.trim() ? error.message : 'No se pudo actualizar el estado.'
       showToast(message, 'error')
@@ -416,16 +416,16 @@ export default function BarriosPage({
 
     try {
       await deleteBarrio(deleteTarget.id_barrio)
-      showToast('Barrio eliminado correctamente.', 'info')
+      showToast('Zona de entrega eliminada correctamente.', 'info')
       setDeleteTarget(null)
     } catch (error) {
-      const message = error instanceof Error && error.message.trim() ? error.message : 'No se pudo eliminar el barrio.'
+      const message = error instanceof Error && error.message.trim() ? error.message : 'No se pudo eliminar la zona.'
       showToast(message, 'error')
     }
   }
 
   const emptyStateTitle =
-    barrios.length === 0 ? 'No hay barrios aun' : 'No encontramos barrios con esos filtros'
+    barrios.length === 0 ? 'No hay zonas de entrega aun' : 'No encontramos zonas con esos filtros'
 
   const clearFilters = () => {
     setSearch('')
@@ -440,7 +440,7 @@ export default function BarriosPage({
   }
 
   return (
-    <main className="bp-page" aria-label="Gestion de barrios Petalops">
+    <main className="bp-page" aria-label="Gestion de zonas de entrega Petalops">
       <section className="bp-container">
         <header className="bp-header">
           <div className="bp-brand-row">
@@ -468,7 +468,7 @@ export default function BarriosPage({
                 Productos
               </button>
               <button type="button" className="bp-btn bp-btn--primary" onClick={openCreateModal}>
-                + Nuevo barrio
+                + Agregar zona
               </button>
               <button type="button" className="bp-btn bp-btn--ghost" onClick={onLogout}>
                 Salir
@@ -478,17 +478,17 @@ export default function BarriosPage({
 
           <div className="bp-title-row">
             <div>
-              <p className="bp-eyebrow">Operacion</p>
-              <h1>Barrios</h1>
+              <p className="bp-eyebrow">Domicilios</p>
+              <h1>Zonas de entrega</h1>
               <p>
-                {filteredBarrios.length} barrios visibles · {stats.activos} disponibles · {stats.sinZona} sin zona
+                {filteredBarrios.length} zonas visibles · {stats.activos} disponibles · {stats.sinZona} sin zona
               </p>
             </div>
             <div className="bp-title-chip">
               <PinIcon />
               <div>
                 <strong>Todo listo</strong>
-                <span>Administracion simple y directa</span>
+                <span>Entregas claras para tu equipo</span>
               </div>
             </div>
           </div>
@@ -497,8 +497,8 @@ export default function BarriosPage({
         <section className="bp-hero">
           <div className="bp-hero__copy">
             <p className="bp-hero__eyebrow">Domicilios</p>
-            <h2>Administra barrios con rapidez y sin perder contexto.</h2>
-            <p>Crea, ajusta costos y cambia el estado de cada barrio desde una vista limpia y pensada para trabajo diario.</p>
+            <h2>Zonas de entrega</h2>
+            <p>Configura los lugares donde realizas domicilios y sus costos.</p>
           </div>
           <div className="bp-hero__meta">
             <div>
@@ -507,7 +507,7 @@ export default function BarriosPage({
             </div>
             <div>
               <strong>{stats.total}</strong>
-              <span>barrios</span>
+              <span>zonas</span>
             </div>
             <div>
               <strong>{formatCop(stats.costoPromedio)}</strong>
@@ -516,9 +516,9 @@ export default function BarriosPage({
           </div>
         </section>
 
-        <section className="bp-stats-grid" aria-label="Resumen de barrios">
+        <section className="bp-stats-grid" aria-label="Resumen de zonas de entrega">
           <article className="bp-stat-card">
-            <p>Total barrios</p>
+            <p>Total zonas</p>
             <strong>{stats.total}</strong>
           </article>
 
@@ -538,7 +538,7 @@ export default function BarriosPage({
           </article>
         </section>
 
-        <section className="bp-toolbar" aria-label="Controles de barrios">
+        <section className="bp-toolbar" aria-label="Controles de zonas de entrega">
           <div className="bp-toolbar__top">
             <label className="bp-input-wrap bp-input-wrap--search">
               <svg viewBox="0 0 24 24" aria-hidden="true" className="bp-search-icon">
@@ -554,7 +554,7 @@ export default function BarriosPage({
               </svg>
               <input
                 type="search"
-                placeholder="Buscar barrio, sucursal o zona"
+                placeholder="Buscar barrio o municipio"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
@@ -576,7 +576,7 @@ export default function BarriosPage({
                 Tabla
               </button>
               <button type="button" className="bp-btn bp-btn--primary" onClick={openCreateModal}>
-                + Agregar barrio
+                + Agregar zona
               </button>
             </div>
           </div>
@@ -636,19 +636,19 @@ export default function BarriosPage({
                 </button>
               </>
             ) : (
-              <span className="bp-toolbar__hint">Usa filtros para encontrar barrios más rápido.</span>
+              <span className="bp-toolbar__hint">Encuentra rápidamente una zona de entrega.</span>
             )}
           </div>
         </section>
 
-        <section className="bp-panel" aria-label="Listado de barrios">
+        <section className="bp-panel" aria-label="Listado de zonas de entrega">
           <label className="bp-input-wrap bp-input-wrap--search">
             <span className="bp-panel__eyebrow">Listado</span>
-            <h2>Barrios registrados</h2>
+            <h2>Zonas registradas</h2>
           </label>
           <div className="bp-panel__header">
             <div className="bp-panel__header-copy">
-              <p className="bp-panel__hint">{viewMode === 'table' ? 'Perfecta para revisar muchos barrios de un vistazo.' : 'Pensada para leer rápido y actuar en uno o dos clics.'}</p>
+              <p className="bp-panel__hint">{viewMode === 'table' ? 'Perfecta para revisar muchas zonas de un vistazo.' : 'Pensada para leer rápido y actuar en uno o dos clics.'}</p>
             </div>
             <div className="bp-panel__header-copy bp-panel__header-copy--right">
               <p className="bp-panel__hint">{sortedBarrios.length} resultados</p>
@@ -656,18 +656,18 @@ export default function BarriosPage({
           </div>
 
           {barriosLoading ? (
-            <section className="bp-empty-state" aria-label="Cargando barrios">
+            <section className="bp-empty-state" aria-label="Cargando zonas de entrega">
               <FlowerIcon className="bp-empty-flower" />
-              <h2>Cargando barrios...</h2>
+              <h2>Cargando zonas...</h2>
               <p>Estamos preparando la lista para mostrarla en pantalla.</p>
             </section>
           ) : sortedBarrios.length === 0 ? (
             <section className="bp-empty-state" aria-label="Estado vacio">
               <FlowerIcon className="bp-empty-flower" />
               <h2>{emptyStateTitle}</h2>
-              <p>Prueba limpiando los filtros o agrega un barrio nuevo para empezar.</p>
+              <p>Prueba limpiando los filtros o agrega una zona nueva para empezar.</p>
               <button type="button" className="bp-btn bp-btn--primary" onClick={openCreateModal}>
-                Agregar barrio
+                + Agregar zona
               </button>
             </section>
           ) : (
@@ -700,15 +700,15 @@ export default function BarriosPage({
                       </div>
 
                       <div className="bp-row__actions" ref={menuAnchorRef}>
-                        <button type="button" className="bp-icon-btn" title="Editar barrio" onClick={() => openEditModal(barrio)} aria-label="Editar barrio">
+                        <button type="button" className="bp-icon-btn" title="Editar zona" onClick={() => openEditModal(barrio)} aria-label="Editar zona">
                           ✎
                         </button>
                         <button
                           type="button"
                           className="bp-icon-btn"
-                          title={barrio.activo === 1 ? 'Ocultar barrio' : 'Mostrar barrio'}
+                          title={barrio.activo === 1 ? 'Ocultar zona' : 'Mostrar zona'}
                           onClick={() => void handleToggleStatus(barrio)}
-                          aria-label={barrio.activo === 1 ? 'Ocultar barrio' : 'Mostrar barrio'}
+                          aria-label={barrio.activo === 1 ? 'Ocultar zona' : 'Mostrar zona'}
                         >
                           {barrio.activo === 1 ? '◔' : '◕'}
                         </button>
@@ -745,7 +745,7 @@ export default function BarriosPage({
                   <table className="bp-table">
                     <thead>
                       <tr>
-                        <th>Barrio</th>
+                        <th>Barrio o municipio</th>
                         <th>Costo</th>
                         <th>Estado</th>
                         <th>Sucursal</th>
@@ -778,19 +778,19 @@ export default function BarriosPage({
                           <td>{formatDate(barrio.updated_at ?? barrio.created_at)}</td>
                           <td>
                             <div className="bp-row__actions bp-row__actions--table" ref={menuAnchorRef}>
-                              <button type="button" className="bp-icon-btn" title="Editar barrio" onClick={() => openEditModal(barrio)} aria-label="Editar barrio">
+                              <button type="button" className="bp-icon-btn" title="Editar zona" onClick={() => openEditModal(barrio)} aria-label="Editar zona">
                                 ✎
                               </button>
                               <button
                                 type="button"
                                 className="bp-icon-btn"
-                                title={barrio.activo === 1 ? 'Ocultar barrio' : 'Mostrar barrio'}
+                                title={barrio.activo === 1 ? 'Ocultar zona' : 'Mostrar zona'}
                                 onClick={() => void handleToggleStatus(barrio)}
-                                aria-label={barrio.activo === 1 ? 'Ocultar barrio' : 'Mostrar barrio'}
+                                aria-label={barrio.activo === 1 ? 'Ocultar zona' : 'Mostrar zona'}
                               >
                                 {barrio.activo === 1 ? '◔' : '◕'}
                               </button>
-                              <button type="button" className="bp-icon-btn" title="Eliminar barrio" onClick={() => setDeleteTarget(barrio)} aria-label="Eliminar barrio">
+                              <button type="button" className="bp-icon-btn" title="Eliminar zona" onClick={() => setDeleteTarget(barrio)} aria-label="Eliminar zona">
                                 🗑
                               </button>
                             </div>
@@ -814,22 +814,22 @@ export default function BarriosPage({
             className="bp-drawer"
             role="dialog"
             aria-modal="true"
-            aria-label={drawerMode === 'edit' ? 'Editar barrio' : 'Agregar barrio'}
+            aria-label={drawerMode === 'edit' ? 'Editar zona' : 'Agregar zona'}
             onClick={(event) => event.stopPropagation()}
           >
             <header className="bp-modal__header">
-              <p className="bp-modal__eyebrow">Barrio</p>
-              <h3>{drawerMode === 'edit' ? 'Cambiar barrio' : 'Agregar barrio'}</h3>
-              <p>Completa los datos del barrio para que aparezca en la lista de tu tienda.</p>
+              <p className="bp-modal__eyebrow">Zona de entrega</p>
+              <h3>{drawerMode === 'edit' ? 'Editar zona' : 'Agregar zona'}</h3>
+              <p>Define el lugar, la sucursal y el costo del domicilio.</p>
             </header>
 
             <label className="bp-form-field">
-              <span>Nombre del barrio</span>
+              <span>Barrio o municipio *</span>
               <input
                 type="text"
                 value={form.nombre_barrio}
                 onChange={(event) => setForm((current) => ({ ...current, nombre_barrio: event.target.value }))}
-                placeholder="Ej: Centro"
+                placeholder="Ej: Miramar o Puerto Colombia"
                 disabled={savingBarrio}
               />
             </label>
@@ -886,7 +886,7 @@ export default function BarriosPage({
             <label className="bp-switch-row">
               <div>
                 <strong>Disponible para pedidos</strong>
-                <span>Actívalo si el barrio debe aparecer al tomar pedidos.</span>
+                <span>Actívalo si esta zona debe aparecer al tomar pedidos.</span>
               </div>
               <button
                 type="button"
@@ -918,8 +918,8 @@ export default function BarriosPage({
           <div className="bp-modal__overlay" onClick={() => setDeleteTarget(null)} />
           <div className="bp-modal__confirm">
             <PinIcon />
-            <h3>Eliminar barrio?</h3>
-            <p>Esta acción quitará el barrio de la lista.</p>
+            <h3>Eliminar zona?</h3>
+            <p>Esta acción quitará la zona de la lista.</p>
             <div className="bp-modal__actions">
               <button type="button" className="bp-btn bp-btn--ghost" onClick={() => setDeleteTarget(null)}>
                 Cancelar

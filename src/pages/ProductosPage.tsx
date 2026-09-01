@@ -801,7 +801,7 @@ export default function ProductosPage({
 
             <div className="pp-title-actions">
               <button type="button" className="pp-btn pp-btn--ghost" onClick={onNavigateToBarrios}>
-                Barrios
+                Zonas de entrega
               </button>
               <button type="button" className="pp-btn pp-btn--primary" onClick={() => setCurrentView('new')}>
                 + Nuevo producto
