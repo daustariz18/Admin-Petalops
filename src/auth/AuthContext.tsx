@@ -13,6 +13,7 @@ import { setUnauthorizedHandler } from '../services/apiClient'
 import { buildApiUrl, hasApiBaseUrl } from '../services/apiUrl'
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
+const ADMIN_PRODUCTOS_EXCHANGE_PATH = import.meta.env.VITE_ADMIN_PRODUCTOS_EXCHANGE_PATH as string | undefined
 
 function toStringValue(value: string | number | undefined): string {
   if (value === undefined) return ''
@@ -97,8 +98,9 @@ type AdminProductosExchangeResponse = {
 
 async function exchangeAdminProductosSession(): Promise<AuthLoginPayload | null> {
   if (!hasApiBaseUrl()) return null
+  if (!ADMIN_PRODUCTOS_EXCHANGE_PATH?.trim()) return null
 
-  const response = await fetch(buildApiUrl('/auth/admin-productos/exchange'), {
+  const response = await fetch(buildApiUrl(ADMIN_PRODUCTOS_EXCHANGE_PATH), {
     method: 'POST',
     credentials: 'include',
     headers: { Accept: 'application/json' },
