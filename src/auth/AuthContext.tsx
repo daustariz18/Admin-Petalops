@@ -2,18 +2,13 @@ import { createContext, useCallback, useEffect, useMemo, useState, type PropsWit
 import { jwtDecode } from 'jwt-decode'
 import {
   clearStoredToken,
-  getStoredAuthProfile,
-  getStoredToken,
   setStoredAuthProfile,
   setStoredToken,
-  syncLoginTenantFromUrl,
 } from './authStorage'
 import type { AuthContextValue, AuthLoginPayload, AuthUser, JwtClaims } from './types'
 import { setUnauthorizedHandler } from '../services/apiClient'
-import { buildApiUrl, hasApiBaseUrl } from '../services/apiUrl'
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
-const ADMIN_PRODUCTOS_EXCHANGE_PATH = import.meta.env.VITE_ADMIN_PRODUCTOS_EXCHANGE_PATH as string | undefined
 
 function toStringValue(value: string | number | undefined): string {
   if (value === undefined) return ''
@@ -81,46 +76,6 @@ function navigateToLogin(): void {
   }
 }
 
-type AdminProductosExchangeResponse = {
-  accessToken?: string
-  access_token?: string
-  user?: {
-    empresaID?: string | number
-    empresaSlug?: string
-    empresaNombre?: string
-    logoUrl?: string
-  }
-  empresa_id?: string | number
-  empresa_slug?: string
-  empresa_nombre?: string
-  logo_url?: string
-}
-
-async function exchangeAdminProductosSession(): Promise<AuthLoginPayload | null> {
-  if (!hasApiBaseUrl()) return null
-  if (!ADMIN_PRODUCTOS_EXCHANGE_PATH?.trim()) return null
-
-  const response = await fetch(buildApiUrl(ADMIN_PRODUCTOS_EXCHANGE_PATH), {
-    method: 'POST',
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
-  })
-
-  if (!response.ok) return null
-
-  const data = (await response.json().catch(() => ({}))) as AdminProductosExchangeResponse
-  const token = data.accessToken || data.access_token
-  if (!token) return null
-
-  return {
-    token,
-    empresaID: data.user?.empresaID ?? data.empresa_id,
-    empresaSlug: data.user?.empresaSlug ?? data.empresa_slug,
-    empresaNombre: data.user?.empresaNombre ?? data.empresa_nombre,
-    logoUrl: data.user?.logoUrl ?? data.logo_url,
-  }
-}
-
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [initializing, setInitializing] = useState(true)
@@ -140,48 +95,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [])
 
   useEffect(() => {
-    const bootstrapAuth = async () => {
-      syncLoginTenantFromUrl()
-
-      const token = getStoredToken()
-      const storedProfile = getStoredAuthProfile()
-
-      if (token) {
-        try {
-          const parsedProfile = storedProfile ? (JSON.parse(storedProfile) as Partial<AuthLoginPayload>) : undefined
-          const persistedUser = buildUserFromAuth(token, parsedProfile)
-          setUser(persistedUser)
-
-          if (window.location.pathname === '/login') {
-            navigateToTenantDashboard(persistedUser.tenantSlug)
-          }
-          setInitializing(false)
-          return
-        } catch {
-          clearStoredToken()
-        }
-      }
-
-      try {
-        const exchangedPayload = await exchangeAdminProductosSession()
-        if (exchangedPayload) {
-          const exchangedUser = buildUserFromAuth(exchangedPayload.token, exchangedPayload)
-          setStoredToken(exchangedPayload.token)
-          setStoredAuthProfile(JSON.stringify(exchangedUser))
-          setUser(exchangedUser)
-          navigateToTenantDashboard(exchangedUser.tenantSlug)
-          setInitializing(false)
-          return
-        }
-      } catch {
-        clearStoredToken()
-      }
-
+    const bootstrapAuth = () => {
+      clearStoredToken()
+      setUser(null)
       setInitializing(false)
       navigateToLogin()
     }
 
-    void bootstrapAuth()
+    bootstrapAuth()
   }, [])
 
   useEffect(() => {

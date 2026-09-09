@@ -6,7 +6,7 @@ Frontend administrativo para PetalOps, construido con React + Vite + TypeScript.
 
 Esta aplicacion cubre dos flujos principales:
 
-1. Login por tenant contra la API.
+1. Login de administrador contra la API usando exclusivamente `usuario.login`.
 2. Creacion de producto con carga de imagen a S3 mediante signed URL.
 
 El frontend funciona con autenticacion JWT, obtiene empresaID desde el token y usa ese valor en headers para operaciones de productos.
@@ -67,19 +67,29 @@ Notas:
 
 ## Flujo funcional
 
-1. Usuario inicia sesion en /auth/login.
-2. Se guarda el token y se decodifica para obtener tenantSlug y empresaID.
-3. Usuario completa formulario de nuevo producto.
-4. Frontend crea producto en API (header X-Empresa-Id).
-5. API responde con productoID + uploadUrl + s3Key.
-6. Frontend sube archivo directo a S3 con PUT usando signed URL.
-7. Frontend confirma imagen en API para asociarla al producto.
+1. Usuario inicia sesion en /auth/login con `usuario` y contrasena.
+2. El backend valida ese identificador contra la columna `login` de la tabla `usuario`.
+3. Se guarda el token y se decodifica para obtener tenantSlug y empresaID.
+4. Usuario completa formulario de nuevo producto.
+5. Frontend crea producto en API (header X-Empresa-Id).
+6. API responde con productoID + uploadUrl + s3Key.
+7. Frontend sube archivo directo a S3 con PUT usando signed URL.
+8. Frontend confirma imagen en API para asociarla al producto.
 
 ## Endpoints esperados por el frontend
 
 Autenticacion:
 
 - POST /auth/login
+
+Payload esperado:
+
+```json
+{
+  "usuario": "usuario_admin",
+  "password": "contrasena"
+}
+```
 
 Productos e imagenes:
 
@@ -126,7 +136,9 @@ src/
 
 - Si la API devuelve 401, el interceptor limpia token y cierra sesion.
 - El usuario se redirige a /login cuando no hay token valido.
-- Al loguear, se navega a /{tenantSlug}/dashboard.
+- El login no envia slug almacenado en localStorage, email ni username; tampoco restaura acceso desde una sesion previa guardada en localStorage.
+- El identificador de acceso debe ser exclusivamente `usuario.login`.
+- Al loguear, se navega a /products.
 
 ## Archivos de apoyo de datos
 

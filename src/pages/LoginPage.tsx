@@ -4,7 +4,7 @@ import type { AuthLoginPayload } from '../auth/types'
 import './LoginPage.css'
 
 type FieldErrors = {
-  username?: string
+  usuario?: string
   password?: string
 }
 
@@ -28,25 +28,6 @@ const PETALOPS_LOGO_CANDIDATES = [
   'https://ddy2osi8uorg4.cloudfront.net/tenants/petalops/logos/logo.png',
   '/petalops-logo.svg',
 ]
-
-function inferTenantSlugFromLogin(value: string): string {
-  const cleaned = value.trim().toLowerCase()
-  if (!cleaned) return ''
-
-  if (cleaned.includes('@')) {
-    const domain = cleaned.split('@')[1]
-    return domain?.split('.')[0] ?? ''
-  }
-
-  return cleaned.split(/[._-]/)[0] ?? ''
-}
-
-function getSlugCandidates(login: string): string[] {
-  const storedSlug = localStorage.getItem('slug')?.trim().toLowerCase() ?? ''
-  const inferredSlug = inferTenantSlugFromLogin(login)
-
-  return Array.from(new Set([storedSlug, inferredSlug].filter(Boolean)))
-}
 
 function EyeIcon({ open }: { open: boolean }) {
   if (open) {
@@ -97,7 +78,7 @@ function FlowerIcon() {
 }
 
 export default function LoginPage({ onAuthenticated }: LoginPageProps) {
-  const [username, setUsername] = useState('')
+  const [usuarioLogin, setUsuarioLogin] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [errors, setErrors] = useState<FieldErrors>({})
@@ -106,7 +87,7 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
   const [submitError, setSubmitError] = useState('')
   const [logoIndex, setLogoIndex] = useState(0)
 
-  const hasUsernameError = Boolean(errors.username)
+  const hasUsuarioError = Boolean(errors.usuario)
   const hasPasswordError = Boolean(errors.password)
   const logoSrc = PETALOPS_LOGO_CANDIDATES[logoIndex]
 
@@ -123,17 +104,12 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
 
     const nextErrors: FieldErrors = {}
 
-    if (!username.trim()) {
-      nextErrors.username = 'Ingresa tu usuario o correo electronico'
+    if (!usuarioLogin.trim()) {
+      nextErrors.usuario = 'Ingresa tu usuario'
     }
 
     if (!password.trim()) {
-      nextErrors.password = 'Usuario, correo o contrasena incorrectos'
-    }
-
-    const slugCandidates = getSlugCandidates(username)
-    if (slugCandidates.length === 0) {
-      nextErrors.username = 'No encontramos la tienda. Ingresa desde el enlace de tu floristeria.'
+      nextErrors.password = 'Usuario o contrasena incorrectos'
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -147,65 +123,50 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
       let lastStatus = 0
       let lastDetail = ''
       let authPayload: AuthLoginPayload | undefined
-      let resolvedSlug = slugCandidates[0] ?? ''
 
-      for (const slug of slugCandidates) {
-        const loginBody = {
-          email: username.trim(),
-          password,
-          slug,
-        }
+      const loginBody = {
+        usuario: usuarioLogin.trim(),
+        password,
+      }
 
-        let response = await fetch(buildApiUrl('/auth/login'), {
+      let response = await fetch(buildApiUrl('/auth/login'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(loginBody),
+      })
+
+      let data = (await response.json().catch(() => ({}))) as LoginResponse
+
+      if (response.status === 422) {
+        response = await fetch(buildApiUrl('/auth/login'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(loginBody),
         })
+        data = (await response.json().catch(() => ({}))) as LoginResponse
+      }
 
-        let data = (await response.json().catch(() => ({}))) as LoginResponse
+      lastStatus = response.status
+      lastDetail = data.detail || ''
 
-        if (response.status === 422) {
-          response = await fetch(buildApiUrl('/auth/login'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: username.trim(),
-              password,
-              slug,
-            }),
-          })
-          data = (await response.json().catch(() => ({}))) as LoginResponse
+      if (response.ok && data.access_token) {
+        authPayload = {
+          token: data.access_token,
+          empresaID: data.empresa_id,
+          empresaSlug: data.empresa_slug,
+          empresaNombre: data.empresa_nombre,
+          logoUrl: data.logo_url,
         }
-
-        lastStatus = response.status
-        lastDetail = data.detail || ''
-
-        if (response.ok && data.access_token) {
-          authPayload = {
-            token: data.access_token,
-            empresaID: data.empresa_id,
-            empresaSlug: data.empresa_slug ?? slug,
-            empresaNombre: data.empresa_nombre,
-            logoUrl: data.logo_url,
-          }
-          resolvedSlug = data.empresa_slug ?? slug
-          break
-        }
-
-        if (response.status === 404) {
-          lastDetail = 'La ruta de autenticacion no esta disponible en el backend configurado.'
-          continue
-        }
-
-        if (response.status !== 401 && response.status >= 400) {
-          lastDetail = data.detail || 'No pudimos conectar con el backend. Intenta de nuevo.'
-        }
+      } else if (response.status === 404) {
+        lastDetail = 'La ruta de autenticacion no esta disponible en el backend configurado.'
+      } else if (response.status !== 401 && response.status >= 400) {
+        lastDetail = data.detail || 'No pudimos conectar con el backend. Intenta de nuevo.'
       }
 
       if (!authPayload) {
         if (lastStatus === 401) {
           setErrors({
-            password: 'Credenciales o slug invalidos. Verifica el usuario, correo, contrasena y tienda.',
+            password: 'Usuario o contrasena incorrectos.',
           })
         } else if (lastStatus === 404) {
           setSubmitError(
@@ -218,7 +179,6 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
         return
       }
 
-      localStorage.setItem('slug', resolvedSlug)
       setSuccess(true)
       setErrors({})
       window.setTimeout(() => {
@@ -266,23 +226,23 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
 
         <form className="login-page__form" onSubmit={(event) => void handleSubmit(event)} noValidate>
           <div className="login-page__field-group">
-            <label htmlFor="username" className="login-page__label">
-              Usuario o correo electronico
+            <label htmlFor="usuario" className="login-page__label">
+              Usuario
             </label>
             <input
-              id="username"
+              id="usuario"
               type="text"
               autoComplete="username"
-              className={`login-page__input ${hasUsernameError ? 'is-error' : ''}`}
-              placeholder="usuario o tu@floristeria.com"
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
+              className={`login-page__input ${hasUsuarioError ? 'is-error' : ''}`}
+              placeholder="usuario"
+              value={usuarioLogin}
+              onChange={(event) => setUsuarioLogin(event.target.value)}
               disabled={loading}
-              aria-invalid={hasUsernameError}
-              aria-describedby={hasUsernameError ? 'login-username-error' : undefined}
+              aria-invalid={hasUsuarioError}
+              aria-describedby={hasUsuarioError ? 'login-usuario-error' : undefined}
             />
-            <p id="login-username-error" className={`login-page__error ${hasUsernameError ? 'is-visible' : ''}`}>
-              {errors.username || 'Ingresa tu usuario o correo electronico'}
+            <p id="login-usuario-error" className={`login-page__error ${hasUsuarioError ? 'is-visible' : ''}`}>
+              {errors.usuario || 'Ingresa tu usuario'}
             </p>
           </div>
 
@@ -314,7 +274,7 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
               </button>
             </div>
             <p id="login-password-error" className={`login-page__error ${hasPasswordError ? 'is-visible' : ''}`}>
-              {errors.password || 'Usuario, correo o contrasena incorrectos'}
+              {errors.password || 'Usuario o contrasena incorrectos'}
             </p>
           </div>
 
