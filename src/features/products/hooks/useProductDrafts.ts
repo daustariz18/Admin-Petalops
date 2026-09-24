@@ -1,10 +1,11 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DraftProduct } from '../types'
 
 type SavedDraft = {
   nombre: string
   precio: string
   categoria: string
+  estado?: 'activo' | 'inactivo'
   descripcion: string
 }
 
@@ -62,6 +63,7 @@ export function useProductDrafts(maxItems: number) {
         nombre: draft.nombre,
         precio: draft.precio,
         categoria: draft.categoria,
+        estado: draft.estado,
         descripcion: draft.descripcion,
       }
     })
@@ -92,6 +94,7 @@ export function useProductDrafts(maxItems: number) {
             nombre: saved?.nombre ?? inferNameFromFile(file.name),
             precio: saved?.precio ?? '',
             categoria: saved?.categoria ?? '',
+            estado: saved?.estado ?? 'activo',
             descripcion: saved?.descripcion ?? '',
           }
         })

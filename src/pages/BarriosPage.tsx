@@ -91,7 +91,6 @@ function PinIcon() {
 }
 
 export default function BarriosPage({
-  empresaID,
   tiendaNombre = 'Flora',
   storeLogoUrl,
   onLogout,
@@ -462,81 +461,37 @@ export default function BarriosPage({
                 <StoreFallback name={tiendaNombre} />
               )}
             </div>
+          </div>
+
+          <div className="bp-title-row">
+            <div className="bp-title-cluster">
+              <div className="bp-section-icon">
+                <PinIcon />
+              </div>
+              <div>
+                <h1>Zonas de entrega</h1>
+                <p>
+                  <strong>{filteredBarrios.length}</strong> zonas <span>-</span>{' '}
+                  <strong>{stats.activos}</strong> disponibles <span>-</span>{' '}
+                  <strong>{stats.sinZona}</strong> sin zona
+                </p>
+              </div>
+            </div>
 
             <div className="bp-header-actions">
               <button type="button" className="bp-btn bp-btn--ghost" onClick={onNavigateToProductos}>
                 Productos
               </button>
               <button type="button" className="bp-btn bp-btn--primary" onClick={openCreateModal}>
-                + Agregar zona
+                <span aria-hidden="true">+</span>
+                <span>Agregar zona</span>
               </button>
               <button type="button" className="bp-btn bp-btn--ghost" onClick={onLogout}>
                 Salir
               </button>
             </div>
           </div>
-
-          <div className="bp-title-row">
-            <div>
-              <p className="bp-eyebrow">Domicilios</p>
-              <h1>Zonas de entrega</h1>
-              <p>
-                {filteredBarrios.length} zonas visibles · {stats.activos} disponibles · {stats.sinZona} sin zona
-              </p>
-            </div>
-            <div className="bp-title-chip">
-              <PinIcon />
-              <div>
-                <strong>Todo listo</strong>
-                <span>Entregas claras para tu equipo</span>
-              </div>
-            </div>
-          </div>
         </header>
-
-        <section className="bp-hero">
-          <div className="bp-hero__copy">
-            <p className="bp-hero__eyebrow">Domicilios</p>
-            <h2>Zonas de entrega</h2>
-            <p>Configura los lugares donde realizas domicilios y sus costos.</p>
-          </div>
-          <div className="bp-hero__meta">
-            <div>
-              <strong>{empresaID}</strong>
-              <span>empresa</span>
-            </div>
-            <div>
-              <strong>{stats.total}</strong>
-              <span>zonas</span>
-            </div>
-            <div>
-              <strong>{formatCop(stats.costoPromedio)}</strong>
-              <span>costo promedio</span>
-            </div>
-          </div>
-        </section>
-
-        <section className="bp-stats-grid" aria-label="Resumen de zonas de entrega">
-          <article className="bp-stat-card">
-            <p>Total zonas</p>
-            <strong>{stats.total}</strong>
-          </article>
-
-          <article className="bp-stat-card">
-            <p>Activos</p>
-            <strong className="is-success">{stats.activos}</strong>
-          </article>
-
-          <article className="bp-stat-card">
-            <p>Sin zona</p>
-            <strong className="is-muted">{stats.sinZona}</strong>
-          </article>
-
-          <article className="bp-stat-card">
-            <p>Costo promedio</p>
-            <strong>{formatCop(stats.costoPromedio)}</strong>
-          </article>
-        </section>
 
         <section className="bp-toolbar" aria-label="Controles de zonas de entrega">
           <div className="bp-toolbar__top">
@@ -574,9 +529,6 @@ export default function BarriosPage({
                 onClick={() => setViewMode('table')}
               >
                 Tabla
-              </button>
-              <button type="button" className="bp-btn bp-btn--primary" onClick={openCreateModal}>
-                + Agregar zona
               </button>
             </div>
           </div>

@@ -94,6 +94,22 @@ export function AuthProvider({ children }: PropsWithChildren) {
     navigateToTenantDashboard(nextUser.tenantSlug)
   }, [])
 
+  const updateLogoUrl = useCallback((logoUrl: string) => {
+    const normalizedLogoUrl = logoUrl.trim()
+    if (!normalizedLogoUrl) return
+
+    setUser((current) => {
+      if (!current) return current
+
+      const nextUser = {
+        ...current,
+        logoUrl: normalizedLogoUrl,
+      }
+      setStoredAuthProfile(JSON.stringify(nextUser))
+      return nextUser
+    })
+  }, [])
+
   useEffect(() => {
     const bootstrapAuth = () => {
       clearStoredToken()
@@ -122,9 +138,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       isAuthenticated: user !== null,
       isInitializing: initializing,
       login,
+      updateLogoUrl,
       logout,
     }),
-    [user, initializing, login, logout],
+    [user, initializing, login, updateLogoUrl, logout],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

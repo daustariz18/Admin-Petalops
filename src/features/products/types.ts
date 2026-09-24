@@ -1,4 +1,4 @@
-﻿export type DraftProduct = {
+export type DraftProduct = {
   id: string
   file: File
   preview: string
@@ -6,6 +6,7 @@
   nombre: string
   precio: string
   categoria: string
+  estado: 'activo' | 'inactivo'
   descripcion: string
 }
 
@@ -52,14 +53,15 @@ function isAllowedPrice(price: number, options?: DraftValidationOptions): boolea
 
 export function isDraftComplete(draft: DraftProduct, options?: DraftValidationOptions): boolean {
   const hasNombre = draft.nombre.trim().length > 0
+  const hasCategoria = draft.categoria.trim().length > 0
   const price = parsePrice(draft.precio)
-  return hasNombre && isAllowedPrice(price, options)
+  return hasNombre && hasCategoria && isAllowedPrice(price, options)
 }
 
 export function formatPrice(value: string): string {
   const digits = value.replace(/\D/g, '')
   if (!digits) return ''
-  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+  return `$ ${digits.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}`
 }
 
 export function getMissingFields(draft: DraftProduct, options?: DraftValidationOptions): string[] {
@@ -67,6 +69,10 @@ export function getMissingFields(draft: DraftProduct, options?: DraftValidationO
 
   if (!draft.nombre.trim()) {
     missing.push('nombre')
+  }
+
+  if (!draft.categoria.trim()) {
+    missing.push('categoria')
   }
 
   if (!isAllowedPrice(parsePrice(draft.precio), options)) {

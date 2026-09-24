@@ -9,6 +9,7 @@ type ProductPreviewListProps = {
   categories: Categoria[]
   saveMetaById: Record<string, DraftSaveMeta>
   onRequestNewCategory: (draftId: string) => void
+  onPreviewImage: (draft: DraftProduct) => void
   onCommit: (
     draftId: string,
     patch: Partial<Omit<DraftProduct, 'id' | 'file' | 'fileKey' | 'preview'>>,
@@ -23,34 +24,37 @@ export function ProductPreviewList({
   categories,
   saveMetaById,
   onRequestNewCategory,
+  onPreviewImage,
   onCommit,
   onRemove,
 }: ProductPreviewListProps) {
   if (drafts.length === 0) {
     return (
       <div className="pc-empty-state" role="status">
-        <div className="pc-empty-state__art">
+        <span className="pc-empty-state__icon" aria-hidden="true">
           <span />
           <span />
           <span />
-        </div>
+        </span>
         <h3>Sube imagenes para comenzar</h3>
-        <p>Veras una vista previa inmediata para editar nombre, precio y categoria antes de guardar.</p>
+        <p>Cada imagen creara una fila editable donde podras completar nombre, categoria, precio y disponibilidad.</p>
       </div>
     )
   }
 
   return (
-    <section className="pc-preview-grid" aria-label="Vista previa de productos">
-      {drafts.map((draft) => (
+    <section className="pc-product-rows" aria-label="Productos editables">
+      {drafts.map((draft, index) => (
         <ProductCard
           key={draft.id}
           draft={draft}
+          index={index}
           disabled={disabled}
           categoryLoading={categoryLoading}
           categories={categories}
           saveMeta={saveMetaById[draft.id]}
           onRequestNewCategory={onRequestNewCategory}
+          onPreviewImage={onPreviewImage}
           onCommit={onCommit}
           onRemove={onRemove}
         />

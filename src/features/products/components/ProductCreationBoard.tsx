@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { NewCategoryDialog } from '../../../components/NewCategoryDialog'
+import { apiClient } from '../../../services/apiClient'
 import { createProductWithImage, validateImageFile } from '../../../services/productService'
+import { buildProductsEndpoint } from '../../../services/productPaths'
 import type { DraftSaveMeta } from '../types'
 import { getDraftCategoryLabel, isDraftComplete, parsePrice } from '../types'
 import { useProductDrafts } from '../hooks/useProductDrafts'
@@ -12,10 +14,63 @@ import { UploadArea } from './UploadArea'
 import './product-creation.css'
 
 const MAX_PRODUCTS = 60
+type DraftFilter = 'todos' | 'listos' | 'incompletos'
 
 type CreatedProduct = Omit<ProductItem, 'id'> & {
   backend_id?: number
   codigo_producto?: string
+}
+
+function BoxIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="pc-icon">
+      <path
+        d="M3.6 7.4L12 3l8.4 4.4v9.2L12 21l-8.4-4.4V7.4zM12 12l8.1-4.3M12 12L3.9 7.7M12 12v8.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function ImageIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="pc-icon">
+      <path
+        d="M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2zm2 11l3-3 2.5 2.5L15 12l4 4M8.5 8.5h.01"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function ListIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="pc-icon">
+      <path
+        d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+async function persistCreatedStatus(productId: number, empresaID: string, estado: ProductItem['estado']) {
+  if (estado === 'activo') return
+
+  const query = `empresa_id=${encodeURIComponent(empresaID)}`
+  await apiClient.patch(`${buildProductsEndpoint(String(productId), 'estado')}?${query}`, { estado })
 }
 
 type ProductCreationBoardProps = {
@@ -49,16 +104,8 @@ export const ProductCreationBoard = ({
   const [newCategoryName, setNewCategoryName] = useState('')
   const [newCategoryError, setNewCategoryError] = useState('')
   const [categoryTargetDraftId, setCategoryTargetDraftId] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (categorias.length === 0) return
-
-    drafts.forEach((draft) => {
-      if (!draft.categoria) {
-        updateDraft(draft.id, { categoria: String(categorias[0].idCategoria) })
-      }
-    })
-  }, [categorias, drafts, updateDraft])
+  const [previewDraft, setPreviewDraft] = useState<(typeof drafts)[number] | null>(null)
+  const [filter, setFilter] = useState<DraftFilter>('todos')
 
   const isPersonalizadosDraft = (draft: (typeof drafts)[number]) => {
     return getDraftCategoryLabel(draft.categoria, categorias).trim().toLowerCase() === 'personalizado'
@@ -73,6 +120,16 @@ export const ProductCreationBoard = ({
       ),
     [drafts, categorias],
   )
+  const completeDraftIds = useMemo(() => new Set(completeDrafts.map((draft) => draft.id)), [completeDrafts])
+  const incompleteDrafts = useMemo(
+    () => drafts.filter((draft) => !completeDraftIds.has(draft.id)),
+    [completeDraftIds, drafts],
+  )
+  const visibleDrafts = useMemo(() => {
+    if (filter === 'listos') return drafts.filter((draft) => completeDraftIds.has(draft.id))
+    if (filter === 'incompletos') return incompleteDrafts
+    return drafts
+  }, [completeDraftIds, drafts, filter, incompleteDrafts])
 
   const canSave =
     !isSaving &&
@@ -109,16 +166,9 @@ export const ProductCreationBoard = ({
 
     try {
       const created = await createCategoria(nombre)
-      const createdId = String(created.idCategoria)
 
       if (categoryTargetDraftId) {
-        updateDraft(categoryTargetDraftId, { categoria: createdId })
-      } else {
-        drafts.forEach((draft) => {
-          if (!draft.categoria) {
-            updateDraft(draft.id, { categoria: createdId })
-          }
-        })
+        updateDraft(categoryTargetDraftId, { categoria: String(created.idCategoria) })
       }
 
       setIsCategoryDialogOpen(false)
@@ -131,6 +181,18 @@ export const ProductCreationBoard = ({
         error instanceof Error ? error.message : 'No se pudo crear la categoria en este momento.',
       )
     }
+  }
+
+  const showIncompleteDrafts = () => {
+    setFilter('incompletos')
+    window.setTimeout(() => {
+      const firstInvalid = incompleteDrafts[0]
+      if (!firstInvalid) return
+      const element = document.getElementById(`draft-${firstInvalid.id}`)
+      element?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const focusTarget = element?.querySelector<HTMLInputElement | HTMLSelectElement>('input, select')
+      focusTarget?.focus()
+    }, 0)
   }
 
   const onSave = async () => {
@@ -181,6 +243,13 @@ export const ProductCreationBoard = ({
           () => undefined,
         )
 
+        let createdEstado = draft.estado
+        try {
+          await persistCreatedStatus(result.id, empresaID.trim(), draft.estado)
+        } catch {
+          createdEstado = 'activo'
+        }
+
         okCount += 1
         savedIds.push(draft.id)
         createdCodes.push(result.codigo_producto)
@@ -189,7 +258,7 @@ export const ProductCreationBoard = ({
           image_url: result.imagenUrl || draft.preview,
           nombre: draft.nombre.trim(),
           precio: parsePrice(draft.precio),
-          estado: 'activo',
+          estado: createdEstado,
           categoria: draft.categoria,
           descripcion: draft.descripcion.trim(),
           codigo_producto: result.codigo_producto,
@@ -230,41 +299,31 @@ export const ProductCreationBoard = ({
   return (
     <section className="pc-shell" aria-label="Creacion de productos">
       <div className="pc-page-header">
+        <div className="pc-page-header__icon">
+          <BoxIcon />
+        </div>
         <div className="pc-page-header__copy">
           <p className="pc-kicker">Productos</p>
           <h2 className="pc-title">Crear productos</h2>
-          <p className="pc-subtitle">
-            Flujo visual para subir imagenes, revisar la vista previa, editar los datos y guardar sin perder el contexto.
-          </p>
+          <p className="pc-subtitle">Sube imagenes, completa la informacion y publicalas en lote.</p>
         </div>
-        <div className="pc-page-header__summary">
-          <span className="pc-summary-badge">{completeDrafts.length > 0 ? 'Completado' : 'En progreso'}</span>
-          <div className="pc-summary-card">
-            <strong>{drafts.length}</strong>
-            <span>imagenes cargadas</span>
-          </div>
-          <div className="pc-summary-card">
-            <strong>{completeDrafts.length}</strong>
-            <span>listas para guardar</span>
-          </div>
+        <div className="pc-flow" aria-label="Flujo de creacion">
+          <span className="is-active"><b>1</b> Subir imagenes</span>
+          <span className={drafts.length > 0 ? 'is-active' : ''}><b>2</b> Completar datos</span>
+          <span className={completeDrafts.length > 0 ? 'is-active' : ''}><b>3</b> Publicar</span>
         </div>
       </div>
 
       <div className="pc-layout">
         <section className="pc-panel pc-panel--upload">
           <div className="pc-section-head">
+            <span className="pc-section-head__icon">
+              <ImageIcon />
+            </span>
             <div>
-              <p className="pc-section-head__label">Subir</p>
-              <h3>Arrastra, suelta y empieza</h3>
+              <h3>Subir imagenes</h3>
+              <small>Arrastra, suelta o selecciona archivos</small>
             </div>
-            <button
-              type="button"
-              className="pc-btn pc-btn--ghost"
-              onClick={() => openNewCategoryDialog()}
-              disabled={isSaving}
-            >
-              Nueva categoria
-            </button>
           </div>
 
           <UploadArea
@@ -272,25 +331,49 @@ export const ProductCreationBoard = ({
             slotsLeft={slotsLeft}
             maxPhotos={MAX_PRODUCTS}
             onUpload={handleImageUpload}
+            onCreateCategory={() => openNewCategoryDialog()}
           />
         </section>
 
         <section className="pc-panel pc-panel--preview">
           <div className="pc-section-head">
+            <span className="pc-section-head__icon pc-section-head__icon--blue">
+              <ListIcon />
+            </span>
             <div>
-              <p className="pc-section-head__label">Ver y editar</p>
-              <h3>Vista previa y edicion</h3>
+              <h3>Completar productos</h3>
+              <small>Revisa y completa la informacion de cada producto.</small>
             </div>
-            <span className="pc-section-head__count">{completeDrafts.length} listo(s)</span>
+            <div className="pc-preview-tools">
+              <div className="pc-filter-tabs" aria-label="Filtrar productos">
+                <button type="button" className={filter === 'todos' ? 'is-active' : ''} onClick={() => setFilter('todos')}>
+                  Todos {drafts.length}
+                </button>
+                <button type="button" className={filter === 'listos' ? 'is-active' : ''} onClick={() => setFilter('listos')}>
+                  Listos {completeDrafts.length}
+                </button>
+                <button
+                  type="button"
+                  className={filter === 'incompletos' ? 'is-active' : ''}
+                  onClick={() => setFilter('incompletos')}
+                >
+                  Incompletos {incompleteDrafts.length}
+                </button>
+              </div>
+              <button type="button" className="pc-icon-menu" aria-label="Opciones de vista">
+                ...
+              </button>
+            </div>
           </div>
 
           <ProductPreviewList
-            drafts={drafts}
+            drafts={visibleDrafts}
             disabled={isSaving}
             categories={categorias}
             categoryLoading={categoriasLoading}
             saveMetaById={saveMetaById}
-            onRequestNewCategory={(draftId) => openNewCategoryDialog(draftId)}
+            onRequestNewCategory={openNewCategoryDialog}
+            onPreviewImage={setPreviewDraft}
             onCommit={updateDraft}
             onRemove={removeDraft}
           />
@@ -304,10 +387,11 @@ export const ProductCreationBoard = ({
       <ProductActionsFooter
         isSaving={isSaving}
         readyCount={completeDrafts.length}
-        disabledCategory={!empresaID?.trim()}
+        totalCount={drafts.length}
+        incompleteCount={incompleteDrafts.length}
         canSave={canSave}
         progressText={progressText}
-        onCreateCategory={() => openNewCategoryDialog()}
+        onShowIncomplete={showIncompleteDrafts}
         onSave={onSave}
       />
 
@@ -323,6 +407,18 @@ export const ProductCreationBoard = ({
         onCancel={closeNewCategoryDialog}
         onSubmit={() => void handleCreateCategoria()}
       />
+
+      {previewDraft ? (
+        <div className="pc-image-preview" role="dialog" aria-modal="true" aria-label="Vista previa de imagen">
+          <button type="button" className="pc-image-preview__backdrop" onClick={() => setPreviewDraft(null)} />
+          <div className="pc-image-preview__panel">
+            <button type="button" className="pc-image-preview__close" onClick={() => setPreviewDraft(null)}>
+              Cerrar
+            </button>
+            <img src={previewDraft.preview} alt={previewDraft.nombre || 'Producto'} />
+          </div>
+        </div>
+      ) : null}
     </section>
   )
 }

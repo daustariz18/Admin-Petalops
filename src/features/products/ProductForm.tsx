@@ -14,8 +14,15 @@ type ProductFormProps = {
   categoriasError: string
   creatingCategoria: boolean
   createCategoria: (nombre: string) => Promise<Categoria>
+  tiendaNombre?: string
+  storeLogoUrl?: string
   onBack: () => void
   onCreatedMany: (products: CreatedProduct[]) => void
+}
+
+function getStoreInitial(name: string): string {
+  const trimmed = name.trim()
+  return trimmed ? trimmed.charAt(0).toUpperCase() : 'P'
 }
 
 export function ProductForm({
@@ -25,16 +32,30 @@ export function ProductForm({
   categoriasError,
   creatingCategoria,
   createCategoria,
+  tiendaNombre = 'Empresa',
+  storeLogoUrl,
   onBack,
   onCreatedMany,
 }: ProductFormProps) {
   return (
     <section className="pf-shell" aria-label="Crear productos">
       <div className="pf-header">
-        <h2>Nuevo producto</h2>
-        <button type="button" className="pcf-btn pcf-btn--ghost" onClick={onBack}>
-          Volver
-        </button>
+        <div className="pf-brand-left">
+          {storeLogoUrl ? (
+            <img src={storeLogoUrl} alt={`Logo ${tiendaNombre}`} className="pf-store-logo" />
+          ) : (
+            <span className="pf-store-fallback" aria-hidden="true">
+              {getStoreInitial(tiendaNombre)}
+            </span>
+          )}
+          <strong>{tiendaNombre}</strong>
+        </div>
+        <div className="pf-header-actions">
+          <button type="button" className="pcf-btn pcf-btn--ghost" onClick={onBack}>
+            <span aria-hidden="true">&lt;-</span>
+            Volver
+          </button>
+        </div>
       </div>
 
       <ProductCreationBoard

@@ -45,5 +45,6 @@ export interface AuthContextValue {
   isAuthenticated: boolean
   isInitializing: boolean
   login: (payload: AuthLoginPayload) => void
+  updateLogoUrl: (logoUrl: string) => void
   logout: () => void
 }

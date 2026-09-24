@@ -3,6 +3,7 @@ import { ProductForm } from '../features/products/ProductForm'
 import { useProducts, type ProductItem } from '../features/products/useProducts'
 import { useCategorias, type Categoria } from '../hooks/useCategorias'
 import { NewCategoryDialog } from '../components/NewCategoryDialog'
+import { getStoredCompanyLogo, setStoredCompanyLogo, uploadCompanyLogo } from '../services/companyLogoStorage'
 import './ProductosPage.css'
 
 type FiltroEstado = 'todos' | 'activo' | 'inactivo'
@@ -14,22 +15,48 @@ type ToastState = {
   type: ToastType
 } | null
 
-type ProductCategoryGroup = {
-  label: string
-  products: ProductItem[]
-}
+const LOGO_MAX_SIZE_MB = 15
+const LOGO_MAX_SIZE_BYTES = LOGO_MAX_SIZE_MB * 1024 * 1024
+const LOGO_ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+])
+const LOGO_ALLOWED_EXTENSIONS = /\.(jpe?g|png|webp|heic|heif)$/i
+const LOGO_ACCEPT = '.jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic,image/heif'
 
 type ProductosPageProps = {
   empresaID: string
   tiendaNombre?: string
   storeLogoUrl?: string
   userInitials?: string
+  onCompanyLogoUpdated?: (logoUrl: string) => void
   onLogout: () => void
   onNavigateToBarrios: () => void
 }
 
 function formatCop(value: number): string {
   return `$ ${value.toLocaleString('es-CO')}`
+}
+
+function parseCurrencyInput(value: string): string {
+  return value.replace(/\D/g, '')
+}
+
+function formatCurrencyInput(value: string): string {
+  const amount = Number(parseCurrencyInput(value))
+  return Number.isFinite(amount) && value ? formatCop(amount) : ''
+}
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+    reader.onerror = () => reject(new Error('No pudimos leer el logo.'))
+    reader.readAsDataURL(file)
+  })
 }
 
 function FlowerIcon({ className = '' }: { className?: string }) {
@@ -72,6 +99,96 @@ function TrashIcon() {
     <svg viewBox="0 0 24 24" aria-hidden="true" className="pp-icon">
       <path
         d="M4 7h16m-10 0V5.7a1.7 1.7 0 011.7-1.7h.6A1.7 1.7 0 0114 5.7V7m-6 0l.6 11a2 2 0 002 1.9h2.8a2 2 0 002-1.9L16 7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function BoxIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className || 'pp-icon'}>
+      <path
+        d="M3.6 7.4L12 3l8.4 4.4v9.2L12 21l-8.4-4.4V7.4zM12 12l8.1-4.3M12 12L3.9 7.7M12 12v8.6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function GearIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="pp-icon">
+      <path
+        d="M12 8.2a3.8 3.8 0 110 7.6 3.8 3.8 0 010-7.6zm7.1 3.8a7.4 7.4 0 00-.1-1.1l2-1.5-2-3.4-2.4 1a8.3 8.3 0 00-1.9-1.1L14.4 3h-4.8l-.3 2.9A8.3 8.3 0 007.4 7L5 6 3 9.4l2 1.5a7.4 7.4 0 000 2.2l-2 1.5L5 18l2.4-1a8.3 8.3 0 001.9 1.1l.3 2.9h4.8l.3-2.9a8.3 8.3 0 001.9-1.1l2.4 1 2-3.4-2-1.5c.1-.4.1-.7.1-1.1z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function PinIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="pp-icon">
+      <path
+        d="M12 21s6-5.3 6-11a6 6 0 10-12 0c0 5.7 6 11 6 11zm0-8.2a2.8 2.8 0 100-5.6 2.8 2.8 0 000 5.6z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function EditIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="pp-icon">
+      <path
+        d="M4 20h4.2L19.5 8.7a2 2 0 00-2.8-2.8L5.4 17.2 4 20zM14.8 7.8l1.4 1.4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function EyeOffIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="pp-icon">
+      <path
+        d="M3 3l18 18M10.6 10.7a2.2 2.2 0 003 2.8M7.2 7.5C4.7 8.8 3 11.1 3 12s3.4 5.5 9 5.5c1.4 0 2.7-.3 3.8-.7M12 6.5c5.6 0 9 4.6 9 5.5 0 .5-.9 1.8-2.3 3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function UploadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="pp-icon">
+      <path
+        d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 16.5V18a2 2 0 002 2h10a2 2 0 002-2v-1.5"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.8"
@@ -127,6 +244,7 @@ export default function ProductosPage({
   tiendaNombre = 'Flora',
   storeLogoUrl,
   userInitials = 'U',
+  onCompanyLogoUpdated,
   onLogout,
   onNavigateToBarrios,
 }: ProductosPageProps) {
@@ -164,15 +282,17 @@ export default function ProductosPage({
   const [editNombre, setEditNombre] = useState('')
   const [editPrecio, setEditPrecio] = useState('')
   const [editCodigoCatalogo, setEditCodigoCatalogo] = useState('')
-  const [editImageS3Key, setEditImageS3Key] = useState('')
   const [editCategoriaId, setEditCategoriaId] = useState('')
   const [editDescripcion, setEditDescripcion] = useState('')
+  const [editEstado, setEditEstado] = useState<ProductItem['estado']>('activo')
   const [editError, setEditError] = useState('')
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [isSavingImage, setIsSavingImage] = useState(false)
   const [imageError, setImageError] = useState('')
   const [avatarOpen, setAvatarOpen] = useState(false)
   const [toast, setToast] = useState<ToastState>(null)
+  const [localLogoUrl, setLocalLogoUrl] = useState(() => getStoredCompanyLogo(empresaID))
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false)
   const [deleteConflictProduct, setDeleteConflictProduct] = useState<ProductItem | null>(null)
   const [categoryDeleteTarget, setCategoryDeleteTarget] = useState<Categoria | null>(null)
   const [categoryDeleteConflict, setCategoryDeleteConflict] = useState<Categoria | null>(null)
@@ -182,12 +302,14 @@ export default function ProductosPage({
   const [isSavingCategoryEdit, setIsSavingCategoryEdit] = useState(false)
   const [categorySearch, setCategorySearch] = useState('')
   const [isCategoryPanelOpen, setIsCategoryPanelOpen] = useState(false)
-  const [isProductsPanelOpen, setIsProductsPanelOpen] = useState(false)
-  const [openProductGroups, setOpenProductGroups] = useState<string[]>([])
 
   const showToast = (message: string, type: ToastType = 'success') => {
     setToast({ message, type })
   }
+
+  useEffect(() => {
+    setLocalLogoUrl(getStoredCompanyLogo(empresaID))
+  }, [empresaID])
 
   useEffect(() => {
     if (!toast) return
@@ -196,12 +318,13 @@ export default function ProductosPage({
   }, [toast])
 
   const logoCandidates = useMemo(() => {
-    const candidates = [storeLogoUrl?.trim() || ''].filter(Boolean)
+    const candidates = [localLogoUrl.trim(), storeLogoUrl?.trim() || ''].filter(Boolean)
     return Array.from(new Set(candidates))
-  }, [storeLogoUrl])
+  }, [localLogoUrl, storeLogoUrl])
 
   const [logoIndex, setLogoIndex] = useState(0)
   const avatarMenuRef = useRef<HTMLDivElement | null>(null)
+  const companyLogoInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (!avatarOpen) return
@@ -219,6 +342,36 @@ export default function ProductosPage({
   useEffect(() => {
     setLogoIndex(0)
   }, [logoCandidates])
+
+  const handleStoreLogoUpload = async (file: File) => {
+    const normalizedType = file.type.trim().toLowerCase()
+
+    if (!LOGO_ALLOWED_MIME_TYPES.has(normalizedType) && !LOGO_ALLOWED_EXTENSIONS.test(file.name)) {
+      showToast('Formato no permitido. Usa JPG, PNG, WebP, HEIC o HEIF.', 'error')
+      return
+    }
+
+    if (file.size > LOGO_MAX_SIZE_BYTES) {
+      showToast(`El logo debe pesar maximo ${LOGO_MAX_SIZE_MB}MB.`, 'error')
+      return
+    }
+
+    setIsUploadingLogo(true)
+
+    try {
+      const result = await uploadCompanyLogo({ file })
+      const nextLogoUrl = result.logoUrl || (await readFileAsDataUrl(file))
+      setStoredCompanyLogo(empresaID, nextLogoUrl)
+      setLocalLogoUrl(nextLogoUrl)
+      onCompanyLogoUpdated?.(nextLogoUrl)
+      showToast('Logo subido a S3 correctamente.', 'success')
+    } catch (error) {
+      const message = error instanceof Error && error.message.trim() ? error.message : 'No se pudo subir el logo.'
+      showToast(message, 'error')
+    } finally {
+      setIsUploadingLogo(false)
+    }
+  }
 
   const getCategoriaLabel = (producto: ProductItem): string => {
     const rawName = producto.categoria?.trim()
@@ -312,61 +465,34 @@ export default function ProductosPage({
     })
   }, [products, busqueda, filtroEstado, filtroCategoria, filtroPrecio, categorias])
 
-  const productGroups = useMemo<ProductCategoryGroup[]>(() => {
-    const grouped = new Map<string, ProductItem[]>()
-
-    for (const producto of productosFiltrados) {
-      const label = getCategoriaLabel(producto).trim() || 'Sin categoria'
-      const current = grouped.get(label)
-      if (current) {
-        current.push(producto)
-      } else {
-        grouped.set(label, [producto])
-      }
-    }
-
-    return Array.from(grouped.entries())
-      .map(([label, groupedProducts]) => ({
-        label,
-        products: groupedProducts,
-      }))
-      .sort((a, b) => {
-        const orderA = categoryOrderIndex.get(a.label.trim().toLowerCase()) ?? Number.MAX_SAFE_INTEGER
-        const orderB = categoryOrderIndex.get(b.label.trim().toLowerCase()) ?? Number.MAX_SAFE_INTEGER
-
-        if (orderA !== orderB) return orderA - orderB
-        return a.label.localeCompare(b.label, 'es')
-      })
-  }, [productosFiltrados, categorias, categoryOrderIndex])
-
-  const toggleProductGroup = (label: string) => {
-    setOpenProductGroups((current) =>
-      current.includes(label) ? current.filter((item) => item !== label) : [...current, label],
-    )
-  }
-
-  useEffect(() => {
-    const hasSearch = busqueda.trim().length > 0
-
-    if (!hasSearch || productGroups.length === 0) return
-
-    const visibleGroupLabels = productGroups.map((group) => group.label)
-    setIsProductsPanelOpen(true)
-    setOpenProductGroups(visibleGroupLabels)
-  }, [busqueda, productGroups])
-
   const stats = useMemo(() => {
     const total = products.length
     const activos = products.filter((p) => p.estado === 'activo').length
     const inactivos = total - activos
 
-    const masCaro = products.reduce<ProductItem | null>((acc, curr) => {
-      if (!acc || curr.precio > acc.precio) return curr
-      return acc
-    }, null)
-
-    return { total, activos, inactivos, masCaro }
+    return { total, activos, inactivos }
   }, [products])
+
+  const isEditDirty = useMemo(() => {
+    if (!modalEditar) return false
+
+    const categoriaByName = categorias.find(
+      (categoria) => modalEditar.categoria?.trim().toLowerCase() === categoria.nombre.trim().toLowerCase(),
+    )
+    const originalCategoriaId =
+      (typeof modalEditar.categoriaID === 'number' ? modalEditar.categoriaID : undefined) ??
+      (modalEditar.categoria && /^\d+$/.test(modalEditar.categoria) ? Number(modalEditar.categoria) : undefined) ??
+      categoriaByName?.idCategoria
+    const originalCategoria = originalCategoriaId && Number.isFinite(originalCategoriaId) ? String(originalCategoriaId) : ''
+
+    return (
+      editNombre.trim() !== modalEditar.nombre.trim() ||
+      Number(editPrecio) !== modalEditar.precio ||
+      editCategoriaId !== originalCategoria ||
+      editDescripcion.trim() !== (modalEditar.descripcion ?? '').trim() ||
+      editEstado !== modalEditar.estado
+    )
+  }, [categorias, editCategoriaId, editDescripcion, editEstado, editNombre, editPrecio, modalEditar])
 
   const confirmarEliminar = async () => {
     if (!modalEliminar) return
@@ -381,7 +507,7 @@ export default function ProductosPage({
     if (result === 'backend_locked') {
       setModalEliminar(null)
       setDeleteConflictProduct(null)
-      showToast('No se pudo eliminar el producto en el backend.', 'error')
+      showToast('No se pudo eliminar el producto.', 'error')
       return
     }
 
@@ -421,7 +547,7 @@ export default function ProductosPage({
     setEditNombre(producto.nombre)
     setEditPrecio(String(producto.precio))
     setEditCodigoCatalogo(producto.codigo_catalogo ?? '')
-    setEditImageS3Key(producto.image_s3_key ?? '')
+    setEditEstado(producto.estado)
     const categoriaByName = categorias.find(
       (categoria) =>
         producto.categoria?.trim().toLowerCase() === categoria.nombre.trim().toLowerCase(),
@@ -456,7 +582,6 @@ export default function ProductosPage({
       setModalEditar((current) =>
         current ? { ...current, image_url: result.image_url, image_s3_key: result.image_s3_key } : current,
       )
-      setEditImageS3Key(result.image_s3_key ?? '')
       showToast('Foto actualizada con exito.', 'success')
     } catch (error) {
       const message = error instanceof Error && error.message.trim() ? error.message : 'No se pudo actualizar la foto.'
@@ -473,16 +598,6 @@ export default function ProductosPage({
     if (!file || !modalEditar) return
 
     await commitImageUpdate({ file })
-  }
-
-  const handleEditImageS3KeySave = async () => {
-    const nextS3Key = editImageS3Key.trim()
-    if (!nextS3Key) {
-      setImageError('Ingresa un s3Key valido.')
-      return
-    }
-
-    await commitImageUpdate({ s3Key: nextS3Key })
   }
 
   const openCategoryEditModal = (categoria: Categoria) => {
@@ -614,6 +729,7 @@ export default function ProductosPage({
 
   const guardarEdicion = async () => {
     if (!modalEditar) return
+    if (!isEditDirty) return
 
     const nombre = editNombre.trim()
     const precio = Number(editPrecio)
@@ -642,22 +758,40 @@ export default function ProductosPage({
 
     const codigoCatalogo = editCodigoCatalogo.trim()
     const categoriaParaEnviar = categoriaSeleccionada?.nombre ?? getCategoriaLabel(modalEditar)
+    const categoriaOriginalPorNombre = categorias.find(
+      (categoria) => modalEditar.categoria?.trim().toLowerCase() === categoria.nombre.trim().toLowerCase(),
+    )
+    const originalCategoriaId =
+      (typeof modalEditar.categoriaID === 'number' ? modalEditar.categoriaID : undefined) ??
+      (modalEditar.categoria && /^\d+$/.test(modalEditar.categoria) ? Number(modalEditar.categoria) : undefined) ??
+      categoriaOriginalPorNombre?.idCategoria
+    const originalCategoriaValue = originalCategoriaId && Number.isFinite(originalCategoriaId) ? String(originalCategoriaId) : ''
+    const hasDataChanges =
+      nombre !== modalEditar.nombre.trim() ||
+      precio !== modalEditar.precio ||
+      editCategoriaId !== originalCategoriaValue ||
+      descripcion !== (modalEditar.descripcion ?? '').trim()
+    const hasStatusChange = editEstado !== modalEditar.estado
 
     setIsSavingEdit(true)
     setEditError('')
 
-    const ok = await updateProduct(modalEditar.id, {
-      nombre,
-      codigo_catalogo: codigoCatalogo || undefined,
-      precio,
-      categoriaID: categoriaId,
-      categoria: categoriaParaEnviar,
-      descripcion,
-    })
+    const ok = hasDataChanges
+      ? await updateProduct(modalEditar.id, {
+          nombre,
+          codigo_catalogo: codigoCatalogo || undefined,
+          precio,
+          categoriaID: categoriaId,
+          categoria: categoriaParaEnviar,
+          descripcion,
+        })
+      : true
+
+    const statusOk = ok && hasStatusChange ? await toggleProductStatus(modalEditar.id) : true
 
     setIsSavingEdit(false)
 
-    if (!ok) {
+    if (!ok || !statusOk) {
       setEditError('No se pudo actualizar el producto. Intenta de nuevo.')
       showToast('No pudimos guardar los cambios.', 'error')
       return
@@ -683,7 +817,7 @@ export default function ProductosPage({
   if (currentView === 'new') {
     return (
       <main className="pp-page" aria-label="Gestion de productos Petalops">
-        <section className="pp-container">
+        <section className="pp-container pp-container--wide">
           <ProductForm
             empresaID={empresaID}
             categorias={categorias}
@@ -691,6 +825,8 @@ export default function ProductosPage({
             categoriasError={categoriasError}
             creatingCategoria={creatingCategoria}
             createCategoria={createCategoria}
+            tiendaNombre={tiendaNombre}
+            storeLogoUrl={logoCandidates[0] || ''}
             onBack={() => setCurrentView('list')}
             onCreatedMany={(createdProducts) => {
               void (async () => {
@@ -713,13 +849,13 @@ export default function ProductosPage({
                 const codes = Array.from(new Set([...directCodes, ...derivedCodes]))
 
                 if (codes.length === 1) {
-                  showToast(`Producto creado correctamente. Código generado: ${codes[0]}`, 'success')
+                  showToast(`Producto creado correctamente. Codigo generado: ${codes[0]}`, 'success')
                   return
                 }
 
                 if (codes.length > 1) {
                   showToast(
-                    `Productos creados correctamente. Códigos generados: ${codes.join(', ')}`,
+                    `Productos creados correctamente. Codigos generados: ${codes.join(', ')}`,
                     'success',
                   )
                   return
@@ -792,53 +928,68 @@ export default function ProductosPage({
           </div>
 
           <div className="pp-title-row">
-            <div>
-              <h1>Productos</h1>
-              <p>
-                {productosFiltrados.length} visibles · {categoriasFiltrables.length} categorias
-              </p>
+            <div className="pp-title-cluster">
+              <div className="pp-section-icon">
+                <BoxIcon />
+              </div>
+              <div>
+                <h1>Productos</h1>
+                <p>
+                  <strong>{stats.total}</strong> productos <span>-</span>{' '}
+                  <strong>{stats.activos}</strong> activos <span>-</span>{' '}
+                  <strong>{stats.inactivos}</strong> inactivos
+                </p>
+              </div>
             </div>
 
             <div className="pp-title-actions">
-              <button type="button" className="pp-btn pp-btn--ghost" onClick={onNavigateToBarrios}>
-                Zonas de entrega
+              <input
+                ref={companyLogoInputRef}
+                type="file"
+                accept={LOGO_ACCEPT}
+                className="pp-logo-upload-input"
+                aria-label="Subir logo de la empresa a S3"
+                disabled={isUploadingLogo}
+                onChange={(event) => {
+                  const file = event.target.files?.[0]
+                  event.target.value = ''
+                  if (file) void handleStoreLogoUpload(file)
+                }}
+              />
+              <button
+                type="button"
+                className="pp-btn pp-btn--logo-upload"
+                onClick={() => companyLogoInputRef.current?.click()}
+                disabled={isUploadingLogo}
+                title="Subir logo de la empresa a S3"
+              >
+                <UploadIcon />
+                <span>{isUploadingLogo ? 'Subiendo logo...' : logoCandidates[0] ? 'Cambiar logo' : 'Subir logo'}</span>
               </button>
               <button type="button" className="pp-btn pp-btn--primary" onClick={() => setCurrentView('new')}>
-                + Nuevo producto
+                <span aria-hidden="true">+</span>
+                <span>Nuevo producto</span>
               </button>
-              <button type="button" className="pp-btn pp-btn--ghost" onClick={onLogout}>
-                Salir
+              <button type="button" className="pp-btn pp-btn--zones" onClick={onNavigateToBarrios}>
+                <PinIcon />
+                <span>Zonas de entrega</span>
+              </button>
+              <button
+                type="button"
+                className="pp-btn pp-btn--ghost"
+                onClick={() => setIsCategoryPanelOpen((current) => !current)}
+                aria-expanded={isCategoryPanelOpen}
+                aria-controls="categories-accordion"
+              >
+                <GearIcon />
+                <span>Gestionar categorias</span>
               </button>
             </div>
           </div>
         </header>
 
-        <section className="pp-stats-inline" aria-label="Resumen de productos">
-          <article className="pp-stat-inline">
-            <span>Total</span>
-            <strong>{stats.total}</strong>
-          </article>
-
-          <article className="pp-stat-inline">
-            <span>Activos</span>
-            <strong className="is-success">{stats.activos}</strong>
-          </article>
-
-          <article className="pp-stat-inline">
-            <span>Inactivos</span>
-            <strong className="is-muted">{stats.inactivos}</strong>
-          </article>
-
-          <article className="pp-stat-inline pp-stat-inline--wide">
-            <span>Mas caro</span>
-            <strong title={stats.masCaro?.nombre || ''}>{stats.masCaro?.nombre || '—'}</strong>
-            <em>{stats.masCaro ? formatCop(stats.masCaro.precio) : '—'}</em>
-          </article>
-        </section>
-
         <section className="pp-filters" aria-label="Filtros de productos">
           <label className="pp-input-wrap pp-input-wrap--search">
-            <span className="pp-filter-label">Producto</span>
             <svg viewBox="0 0 24 24" aria-hidden="true" className="pp-search-icon">
               <path
                 d="M11 4a7 7 0 015.4 11.5L20 19"
@@ -859,18 +1010,16 @@ export default function ProductosPage({
           </label>
 
           <label className="pp-input-wrap">
-            <span className="pp-filter-label">Estado</span>
             <select value={filtroEstado} onChange={(event) => setFiltroEstado(event.target.value as FiltroEstado)}>
-              <option value="todos">Todos</option>
+              <option value="todos">Estado</option>
               <option value="activo">Activo</option>
               <option value="inactivo">Inactivo</option>
             </select>
           </label>
 
           <label className="pp-input-wrap">
-            <span className="pp-filter-label">Categoria</span>
             <select value={filtroCategoria} onChange={(event) => setFiltroCategoria(event.target.value)}>
-              <option value="todas">Todas</option>
+              <option value="todas">Categoria</option>
               {categoriasFiltrables.map((categoria) => (
                 <option key={categoria} value={categoria}>
                   {categoria}
@@ -880,17 +1029,40 @@ export default function ProductosPage({
           </label>
 
           <label className="pp-input-wrap">
-            <span className="pp-filter-label">Precio</span>
             <select value={filtroPrecio} onChange={(event) => setFiltroPrecio(event.target.value as FiltroPrecio)}>
-              <option value="todos">Todos los precios</option>
+              <option value="todos">Precio</option>
               <option value="lt200">Menos de $200.000</option>
-              <option value="200to400">$200.000 – $400.000</option>
+              <option value="200to400">$200.000 - $400.000</option>
               <option value="gt400">Mas de $400.000</option>
             </select>
           </label>
+
+          <div className="pp-filter-tabs" aria-label="Filtro rapido por estado">
+            <button
+              type="button"
+              className={filtroEstado === 'todos' ? 'is-active' : ''}
+              onClick={() => setFiltroEstado('todos')}
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              className={filtroEstado === 'activo' ? 'is-active' : ''}
+              onClick={() => setFiltroEstado('activo')}
+            >
+              Activos
+            </button>
+            <button
+              type="button"
+              className={filtroEstado === 'inactivo' ? 'is-active' : ''}
+              onClick={() => setFiltroEstado('inactivo')}
+            >
+              Inactivos
+            </button>
+          </div>
         </section>
 
-        <section className="pp-category-panel" aria-label="Gestion de categorias">
+        <section className={`pp-category-panel ${isCategoryPanelOpen ? 'is-open' : ''}`} aria-label="Gestion de categorias">
           <div className="pp-category-panel__header">
             <div className="pp-category-panel__header-copy">
               <p className="pp-category-panel__eyebrow">Categorias</p>
@@ -1076,21 +1248,22 @@ export default function ProductosPage({
         </section>
 
         {isLoading ? (
-          <section
-            className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 justify-items-center"
-            aria-label="Cargando productos"
-          >
+          <section className="pp-products-table pp-products-table--loading" aria-label="Cargando productos">
+            <div className="pp-table-head">
+              <span>Producto</span>
+              <span>Categoria</span>
+              <span>Precio</span>
+              <span>Estado</span>
+              <span>Acciones</span>
+            </div>
             {Array.from({ length: 6 }).map((_, index) => (
-              <article
-                key={`skeleton-${index}`}
-                className="w-full max-w-[250px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-md"
-              >
-                <div className="h-[200px] w-full animate-pulse bg-slate-200" />
-                <div className="flex flex-col gap-3 p-3">
-                  <div className="h-3 w-3/4 animate-pulse rounded bg-slate-200" />
-                  <div className="h-3 w-1/2 animate-pulse rounded bg-slate-200" />
-                </div>
-              </article>
+              <div key={`skeleton-${index}`} className="pp-table-row pp-table-row--skeleton">
+                <span />
+                <span />
+                <span />
+                <span />
+                <span />
+              </div>
             ))}
           </section>
         ) : productosFiltrados.length === 0 ? (
@@ -1115,179 +1288,82 @@ export default function ProductosPage({
             </button>
           </section>
         ) : (
-          <section className="pp-products-accordion" aria-label="Catalogo de productos por categoria">
-            <div className="pp-products-accordion__header">
-              <div className="pp-products-accordion__header-copy">
-                <p className="pp-products-accordion__eyebrow">Catalogo</p>
-                <h2>Productos por categoria</h2>
-                <p className="pp-products-accordion__hint">
-                  Revisa tus productos por categoria y abre solo los que quieras ver.
-                </p>
+          <section className="pp-products-list" aria-label="Listado de productos">
+            <p className="pp-results-count">{productosFiltrados.length} productos encontrados</p>
+            <div className="pp-products-table" role="table" aria-label="Productos">
+              <div className="pp-table-head" role="row">
+                <span role="columnheader">Producto</span>
+                <span role="columnheader">Categoria</span>
+                <span role="columnheader">Precio</span>
+                <span role="columnheader">Estado</span>
+                <span role="columnheader">Acciones</span>
               </div>
-              <button
-                type="button"
-                className="pp-products-accordion__toggle"
-                onClick={() => setIsProductsPanelOpen((current) => !current)}
-                aria-expanded={isProductsPanelOpen}
-                aria-controls="products-accordion"
-              >
-                <span>{isProductsPanelOpen ? 'Ocultar' : 'Mostrar'}</span>
-                <svg
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
-                  className={`pp-products-accordion__chevron ${isProductsPanelOpen ? 'is-open' : ''}`}
-                >
-                  <path
-                    d="M6 9l6 6 6-6"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.9"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </button>
-            </div>
 
-            <div
-              id="products-accordion"
-              className={`pp-products-accordion__body ${isProductsPanelOpen ? 'is-open' : ''}`}
-              aria-hidden={!isProductsPanelOpen}
-            >
-              <div className="pp-products-accordion__body-inner">
-                <div className="pp-products-accordion__stats">
-                  <strong>{productGroups.length}</strong>
-                  <span>categorias visibles</span>
-                </div>
+              {productosFiltrados.map((producto) => {
+                const productCode = producto.codigo_producto || producto.codigo_catalogo || 'Sin codigo'
 
-                {productGroups.map((group) => {
-                  const isOpen = openProductGroups.includes(group.label)
-                  return (
-                    <article key={group.label} className="pp-product-group">
+                return (
+                  <article key={producto.id} className="pp-table-row" role="row">
+                    <div className="pp-table-product" role="cell">
+                      <div className="pp-product-thumb">
+                        <ProductImage src={producto.image_url} alt={producto.nombre} />
+                      </div>
+                      <div className="pp-table-product__copy">
+                        <strong title={producto.nombre}>{producto.nombre}</strong>
+                        <span>{productCode}</span>
+                      </div>
+                    </div>
+
+                    <div className="pp-table-cell" role="cell">{getCategoriaLabel(producto)}</div>
+                    <div className="pp-table-cell pp-table-price" role="cell">{formatCop(producto.precio)}</div>
+                    <div className="pp-table-cell" role="cell">
+                      <span
+                        className={`pp-status-badge ${
+                          producto.estado === 'activo' ? 'is-active' : 'is-inactive'
+                        }`}
+                      >
+                        {producto.estado === 'activo' ? 'Activo' : 'Inactivo'}
+                      </span>
+                    </div>
+
+                    <div className="pp-row-actions" role="cell">
                       <button
                         type="button"
-                        className="pp-product-group__header"
-                        onClick={() => toggleProductGroup(group.label)}
-                        aria-expanded={isOpen}
-                        aria-controls={`group-${group.label.replace(/\s+/g, '-').toLowerCase()}`}
+                        className="pp-mini-action"
+                        onClick={() => openEditarModal(producto)}
+                        aria-label={`Editar ${producto.nombre}`}
+                        title="Editar"
                       >
-                        <div className="pp-product-group__copy">
-                          <strong>{group.label}</strong>
-                          <span>{group.products.length} producto(s)</span>
-                        </div>
-                        <div className="pp-product-group__actions">
-                          <span className="pp-product-group__badge">
-                            {isOpen ? 'Abierto' : 'Plegado'}
-                          </span>
-                          <svg
-                            viewBox="0 0 24 24"
-                            aria-hidden="true"
-                            className={`pp-product-group__chevron ${isOpen ? 'is-open' : ''}`}
-                          >
-                            <path
-                              d="M6 9l6 6 6-6"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.9"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        </div>
+                        <EditIcon />
+                        <span>Editar</span>
                       </button>
-
-                      <div
-                        id={`group-${group.label.replace(/\s+/g, '-').toLowerCase()}`}
-                        className={`pp-product-group__body ${isOpen ? 'is-open' : ''}`}
-                        aria-hidden={!isOpen}
+                      <button
+                        type="button"
+                        className="pp-mini-action"
+                        onClick={() => void handleToggleStatus(producto)}
+                        aria-label={producto.estado === 'activo' ? `Desactivar ${producto.nombre}` : `Activar ${producto.nombre}`}
+                        title={producto.estado === 'activo' ? 'Desactivar' : 'Activar'}
                       >
-                        <div className="pp-product-group__body-inner">
-                          <section className="pp-products-grid" aria-label={`Productos de ${group.label}`}>
-                            {isOpen
-                              ? group.products.map((producto) => {
-                                  const codigoCatalogo = producto.codigo_catalogo
-
-                                  return (
-                                    <article
-                                      key={producto.id}
-                                      className="pp-product-card pp-product-card--catalog"
-                                    >
-                                      <div className="pp-product-media">
-                                        <ProductImage src={producto.image_url} alt={producto.nombre} />
-                                        <div className="pp-product-media__overlay">
-                                          <span
-                                            className={`pp-status-badge ${
-                                              producto.estado === 'activo' ? 'is-active' : 'is-inactive'
-                                            }`}
-                                          >
-                                            {producto.estado === 'activo' ? 'Activo' : 'Inactivo'}
-                                          </span>
-                                        </div>
-                                      </div>
-
-                                      <div className="pp-product-info">
-                                        {codigoCatalogo ? (
-                                          <span className="pp-code-badge">Catálogo: {codigoCatalogo}</span>
-                                        ) : null}
-
-                                        <h3 className="pp-product-title" title={producto.nombre}>
-                                          {producto.nombre}
-                                        </h3>
-                                      <div className="pp-product-meta">
-                                        <p className="pp-product-price">{formatCop(producto.precio)}</p>
-                                        <span className="pp-category-tag">{getCategoriaLabel(producto)}</span>
-                                      </div>
-
-                                      <div className="pp-card-actions">
-                                        <div className="pp-card-actions__main">
-                                          <button
-                                            type="button"
-                                            className="pp-btn pp-btn--outline"
-                                            onClick={() => openEditarModal(producto)}
-                                          >
-                                            Editar
-                                          </button>
-
-                                          <button
-                                            type="button"
-                                            className="pp-btn pp-btn--danger-soft"
-                                            onClick={() => {
-                                              setDeleteConflictProduct(null)
-                                              setModalEliminar(producto)
-                                            }}
-                                          >
-                                            <TrashIcon />
-                                            <span>Eliminar</span>
-                                          </button>
-                                        </div>
-
-                                        <button
-                                          type="button"
-                                          className={`pp-switch ${
-                                            producto.estado === 'activo' ? 'is-on' : 'is-off'
-                                          }`}
-                                          aria-label={
-                                            producto.estado === 'activo'
-                                              ? 'Desactivar producto'
-                                              : 'Activar producto'
-                                          }
-                                          onClick={() => void handleToggleStatus(producto)}
-                                        >
-                                          <span className="pp-switch-thumb" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </article>
-                                  )
-                                })
-                              : null}
-                          </section>
-                        </div>
-                      </div>
-                    </article>
-                  )
-                })}
-              </div>
+                        <EyeOffIcon />
+                        <span>{producto.estado === 'activo' ? 'Desactivar' : 'Activar'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="pp-mini-action pp-mini-action--danger"
+                        onClick={() => {
+                          setDeleteConflictProduct(null)
+                          setModalEliminar(producto)
+                        }}
+                        aria-label={`Eliminar ${producto.nombre}`}
+                        title="Eliminar"
+                      >
+                        <TrashIcon />
+                        <span>Eliminar</span>
+                      </button>
+                    </div>
+                  </article>
+                )
+              })}
             </div>
           </section>
         )}
@@ -1304,7 +1380,7 @@ export default function ProductosPage({
           />
           <div className="pp-modal-card">
             <WarningIcon />
-            <h3>{deleteConflictProduct ? 'No se puede eliminar este producto' : '¿Eliminar producto?'}</h3>
+            <h3>{deleteConflictProduct ? 'No se puede eliminar este producto' : 'Eliminar producto?'}</h3>
             <p>
               {deleteConflictProduct
                 ? 'Este producto ya tiene pedidos asociados. Puedes desactivarlo para ocultarlo del catalogo sin borrar su historial.'
@@ -1346,22 +1422,20 @@ export default function ProductosPage({
             <header className="pp-modal-card__header">
               <p className="pp-modal-card__eyebrow">Producto</p>
               <h3>Editar producto</h3>
-              <p>Actualiza la informacion principal del producto.</p>
+              <p>Revisa y actualiza la informacion principal del producto.</p>
             </header>
 
-            <div className="pp-edit-image">
-              {modalEditar.image_url ? (
-                <img src={modalEditar.image_url} alt={modalEditar.nombre} className="pp-edit-image__preview" />
-              ) : (
-                <div className="pp-edit-image__empty">Sin imagen</div>
-              )}
-              <div className="pp-edit-image__section">
-                <div className="pp-edit-image__section-head">
-                  <strong>Subir nueva foto</strong>
-                  <span>Reemplaza la imagen usando un archivo.</span>
+            <div className="pp-edit-layout">
+              <aside className="pp-edit-image">
+                <div className="pp-edit-image__frame">
+                  {modalEditar.image_url ? (
+                    <img src={modalEditar.image_url} alt={modalEditar.nombre} className="pp-edit-image__preview" />
+                  ) : (
+                    <div className="pp-edit-image__empty">Sin imagen</div>
+                  )}
                 </div>
                 <label className="pp-edit-image__button">
-                  <span>{isSavingImage ? 'Actualizando foto...' : 'Elegir archivo'}</span>
+                  <span>{isSavingImage ? 'Cambiando imagen...' : 'Cambiar imagen'}</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -1369,98 +1443,100 @@ export default function ProductosPage({
                     disabled={isSavingEdit || isSavingImage}
                   />
                 </label>
-              </div>
-              <div className="pp-edit-image__section">
-                <div className="pp-edit-image__section-head">
-                  <strong>Reasociar por s3Key</strong>
-                  <span>Usa esta opción si ya tienes la ruta guardada en S3.</span>
-                </div>
+                <small>Formatos permitidos: JPG, PNG o WebP.</small>
+              </aside>
+
+              <section className="pp-edit-main" aria-label="Informacion principal">
                 <label className="pp-form-field">
-                  <span>S3 Key de imagen</span>
+                  <span>Nombre</span>
                   <input
                     type="text"
-                    value={editImageS3Key}
-                    onChange={(event) => setEditImageS3Key(event.target.value)}
-                    disabled={isSavingEdit || isSavingImage}
-                    placeholder="tenants/flora/productos/123/imagen.jpg"
+                    value={editNombre}
+                    onChange={(event) => setEditNombre(event.target.value)}
+                    disabled={isSavingEdit}
                   />
                 </label>
-                <button
-                  type="button"
-                  className="pp-btn pp-btn--ghost"
-                  onClick={() => void handleEditImageS3KeySave()}
-                  disabled={isSavingEdit || isSavingImage}
-                >
-                  {isSavingImage ? 'Guardando...' : 'Reasociar imagen'}
-                </button>
-              </div>
-              <small>Si el backend responde con error, la imagen actual no se reemplaza y se muestra el mensaje devuelto.</small>
+
+                <label className="pp-form-field">
+                  <span>Categoria</span>
+                  <select
+                    value={editCategoriaId}
+                    onChange={(event) => setEditCategoriaId(event.target.value)}
+                    disabled={isSavingEdit}
+                  >
+                    <option value="">Selecciona categoria</option>
+                    {categorias.map((categoria) => (
+                      <option key={categoria.idCategoria} value={String(categoria.idCategoria)}>
+                        {categoria.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="pp-form-field">
+                  <span>Precio</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={formatCurrencyInput(editPrecio)}
+                    onChange={(event) => setEditPrecio(parseCurrencyInput(event.target.value))}
+                    disabled={isSavingEdit}
+                    placeholder="$ 0"
+                  />
+                </label>
+
+                <div className="pp-form-field">
+                  <span>Estado</span>
+                  <div className="pp-status-segment" role="group" aria-label="Estado del producto">
+                    <button
+                      type="button"
+                      className={editEstado === 'activo' ? 'is-active' : ''}
+                      onClick={() => setEditEstado('activo')}
+                      disabled={isSavingEdit}
+                    >
+                      Activo
+                    </button>
+                    <button
+                      type="button"
+                      className={editEstado === 'inactivo' ? 'is-active' : ''}
+                      onClick={() => setEditEstado('inactivo')}
+                      disabled={isSavingEdit}
+                    >
+                      Inactivo
+                    </button>
+                  </div>
+                </div>
+
+                <label className="pp-form-field pp-form-field--readonly">
+                  <span>Codigo del producto</span>
+                  <input
+                    type="text"
+                    value={modalEditar.codigo_producto || editCodigoCatalogo || 'Sin codigo'}
+                    readOnly
+                    disabled={isSavingEdit}
+                  />
+                </label>
+
+                <label className="pp-form-field pp-form-field--wide">
+                  <span>Descripcion</span>
+                  <textarea
+                    value={editDescripcion}
+                    onChange={(event) => setEditDescripcion(event.target.value)}
+                    disabled={isSavingEdit}
+                    rows={4}
+                    placeholder="Agrega una descripcion para el producto"
+                  />
+                </label>
+              </section>
             </div>
-
-            <label className="pp-form-field">
-              <span>Nombre</span>
-              <input
-                type="text"
-                value={editNombre}
-                onChange={(event) => setEditNombre(event.target.value)}
-                disabled={isSavingEdit}
-              />
-            </label>
-
-            <label className="pp-form-field">
-              <span>Precio</span>
-              <input
-                type="number"
-                min="0"
-                step="1000"
-                value={editPrecio}
-                onChange={(event) => setEditPrecio(event.target.value)}
-                disabled={isSavingEdit}
-              />
-            </label>
-
-            <label className="pp-form-field">
-              <span>Código del catálogo</span>
-              <input
-                type="text"
-                value={editCodigoCatalogo}
-                onChange={(event) => setEditCodigoCatalogo(event.target.value)}
-                disabled={isSavingEdit}
-                placeholder="Ej: CAT-001"
-              />
-            </label>
-
-            <label className="pp-form-field">
-              <span>Categoria</span>
-              <select
-                value={editCategoriaId}
-                onChange={(event) => setEditCategoriaId(event.target.value)}
-                disabled={isSavingEdit}
-              >
-                <option value="">Selecciona categoria</option>
-                {categorias.map((categoria) => (
-                  <option key={categoria.idCategoria} value={String(categoria.idCategoria)}>
-                    {categoria.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="pp-form-field">
-              <span>Descripcion</span>
-              <textarea
-                value={editDescripcion}
-                onChange={(event) => setEditDescripcion(event.target.value)}
-                disabled={isSavingEdit}
-                rows={4}
-                placeholder="Agrega una descripcion para el producto"
-              />
-            </label>
 
             {editError ? <p className="pp-form-error">{editError}</p> : null}
             {imageError ? <p className="pp-form-error">{imageError}</p> : null}
 
             <div className="pp-modal-actions">
+              <span className={`pp-dirty-note ${isEditDirty ? 'is-visible' : ''}`}>
+                Cambios sin guardar
+              </span>
               <button type="button" className="pp-btn pp-btn--ghost" onClick={closeEditarModal} disabled={isSavingEdit}>
                 Cancelar
               </button>
@@ -1468,7 +1544,7 @@ export default function ProductosPage({
                 type="button"
                 className="pp-btn pp-btn--primary"
                 onClick={() => void guardarEdicion()}
-                disabled={isSavingEdit || isSavingImage}
+                disabled={isSavingEdit || isSavingImage || !isEditDirty}
               >
                 {isSavingEdit ? 'Guardando...' : 'Guardar cambios'}
               </button>
@@ -1482,7 +1558,7 @@ export default function ProductosPage({
         nombre={categoryEditName}
         error={categoryEditError}
         isSaving={isSavingCategoryEdit}
-        title="Editar categoría"
+        title="Editar categoria"
         submitLabel="Guardar cambios"
         onNombreChange={(value) => {
           setCategoryEditName(value)
@@ -1503,7 +1579,7 @@ export default function ProductosPage({
           />
           <div className="pp-modal-card">
             <WarningIcon />
-            <h3>{categoryDeleteConflict ? 'No se puede eliminar esta categoria' : '¿Eliminar categoria?'}</h3>
+            <h3>{categoryDeleteConflict ? 'No se puede eliminar esta categoria' : 'Eliminar categoria?'}</h3>
             <p>
               {categoryDeleteConflict
                 ? 'Esta categoria tiene productos asociados. Puedes desactivarla para ocultarla sin borrar su historial.'

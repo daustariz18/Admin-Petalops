@@ -862,6 +862,7 @@ h1 {
 
 .pl-shell,
 .pf-shell {
+  width: 100%;
   display: grid;
   gap: 0.7rem;
 }
@@ -872,6 +873,12 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 0.7rem;
+}
+
+.pf-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
 }
 
 .pl-header h2,
@@ -1265,6 +1272,16 @@ h1 {
 
   .pl-header {
     align-items: center;
+  }
+
+  .pf-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pf-header-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .pl-header h2 {

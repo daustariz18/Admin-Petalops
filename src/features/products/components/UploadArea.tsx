@@ -5,13 +5,15 @@ type UploadAreaProps = {
   slotsLeft: number
   maxPhotos: number
   onUpload: (files: File[]) => void
+  onCreateCategory: () => void
 }
 
-export function UploadArea({ disabled, slotsLeft, maxPhotos, onUpload }: UploadAreaProps) {
+export function UploadArea({ disabled, slotsLeft, maxPhotos, onUpload, onCreateCategory }: UploadAreaProps) {
   const [isDragging, setIsDragging] = useState(false)
   const uploadedCount = maxPhotos - slotsLeft
+  const percent = Math.round((uploadedCount / maxPhotos) * 100)
 
-  const onDrop = (event: DragEvent<HTMLLabelElement>) => {
+  const onDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     setIsDragging(false)
     onUpload(Array.from(event.dataTransfer.files))
@@ -23,39 +25,57 @@ export function UploadArea({ disabled, slotsLeft, maxPhotos, onUpload }: UploadA
   }
 
   return (
-    <label
+    <div
       className={`pc-dropzone ${isDragging ? 'is-dragging' : ''} ${disabled ? 'is-disabled' : ''}`}
       onDrop={onDrop}
       onDragOver={(event) => event.preventDefault()}
       onDragEnter={() => setIsDragging(true)}
       onDragLeave={() => setIsDragging(false)}
     >
-      <input
-        type="file"
-        accept="image/*"
-        multiple
-        disabled={disabled || slotsLeft <= 0}
-        onChange={onChange}
-        aria-label="Subir fotos de productos"
-        className="pc-dropzone__input"
-      />
+      <label className="pc-dropzone__box">
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          disabled={disabled || slotsLeft <= 0}
+          onChange={onChange}
+          aria-label="Subir fotos de productos"
+          className="pc-dropzone__input"
+        />
 
-      <div className="pc-dropzone__icon">
-        <span />
-        <span />
-      </div>
+        <div className="pc-dropzone__icon">
+          <span />
+          <span />
+        </div>
 
-      <div className="pc-dropzone__copy">
-        <p>Arrastra tus imagenes o haz clic para subir</p>
-        <small>Las fotos se convierten a WebP y se optimizan para reducir peso en KB y consumo de CDN.</small>
-      </div>
+        <div className="pc-dropzone__copy">
+          <p>Arrastra tus imagenes aqui</p>
+          <small>o haz clic para seleccionar</small>
+        </div>
 
-      <div className="pc-dropzone__actions">
-        <span className="pc-dropzone__counter">
-          {uploadedCount} / {maxPhotos} imagenes
-        </span>
-        <span className="pc-dropzone__button">Seleccionar archivos</span>
-      </div>
-    </label>
+        <div className="pc-dropzone__actions">
+          <span className="pc-dropzone__counter">
+            {uploadedCount} / {maxPhotos} imagenes
+            <i style={{ width: `${percent}%` }} />
+          </span>
+          <span className="pc-dropzone__button">Seleccionar archivos</span>
+        </div>
+      </label>
+
+      <span className="pc-upload-divider" aria-hidden="true" />
+
+      <button
+        type="button"
+        className="pc-btn pc-btn--ghost pc-btn--full"
+        onClick={(event) => {
+          event.preventDefault()
+          onCreateCategory()
+        }}
+        disabled={disabled}
+      >
+        Nueva categoria
+      </button>
+
+    </div>
   )
 }

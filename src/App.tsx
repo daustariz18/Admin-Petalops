@@ -32,7 +32,7 @@ function buildUserInitials(value: string): string {
 }
 
 function App() {
-  const { isAuthenticated, isInitializing, user, login, logout } = useAuth()
+  const { isAuthenticated, isInitializing, user, login, updateLogoUrl, logout } = useAuth()
   const [section, setSection] = useState<'productos' | 'barrios'>('productos')
   const handleLogout = () => {
     setSection('productos')
@@ -56,6 +56,7 @@ function App() {
       tiendaNombre={resolvedStoreName}
       storeLogoUrl={user.logoUrl}
       userInitials={resolvedUserInitials}
+      onCompanyLogoUpdated={updateLogoUrl}
       onLogout={handleLogout}
       onNavigateToBarrios={() => setSection('barrios')}
     />
